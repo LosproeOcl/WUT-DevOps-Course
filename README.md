@@ -1,18 +1,20 @@
-# Git Handbook —— Try it yourself 练习记录
+# Git Handbook —— Try it yourself 完整操作记录
 
-本文档记录依据《1. git-guide-and-practice.pdf》完成的 15 步 Git 练习全过程，以及本练习仓库的特殊配置说明。
+本文档依据《1. git-guide-and-practice.pdf》完成 15 步 Git 练习，**完整保留全部操作过程与命令行（含关键输出），无一遗漏**。
 
-> 详细逐步操作（含命令与输出）见同目录 `LOG.md`。
+- 作者：Yu Qingyang
+- 邮箱：losproeocl@gmail.com
+- 完成日期：2026-10-12
+
+---
 
 ## 一、背景与目标
 
 - 来源文档：`1. git-guide-and-practice.pdf`（Git Handbook，15 个 "Try it yourself" 练习）
 - 目标：在现有项目 `Devops&MLOps` 内完成全部练习，提交并推送到 GitHub，但**不影响现有项目完整性**
-- 完成日期：2026-10-12
+- 现有项目仓库：`LosproeOcl/WUT-DevOps-Course`（`main` 分支保存课程资料）
 
-## 二、仓库结构说明（关键：独立分支映射方案）
-
-现有项目仓库为 `LosproeOcl/WUT-DevOps-Course`，其 `main` 分支保存课程资料。
+## 二、仓库结构（关键：独立分支映射方案）
 
 练习**没有**新建独立的 GitHub 仓库，而是采用「子文件夹 + 独立分支」方案：
 
@@ -24,59 +26,464 @@
 | push | `refs/heads/main -> refs/heads/git-playground` | 本地 `main` 提交推到远端 `git-playground` 分支 |
 | fetch | `refs/heads/git-playground -> refs/remotes/origin/main` | 远端 `git-playground` 映射为本地 `origin/main`，使 PDF 里 `origin/main` 写法照常有效 |
 
-现有项目侧保护：
+现有项目侧保护：在项目根目录 `.gitignore` 中加入 `git-playground/` 与 `git-playground-peer/`，防止练习仓库被误提交进项目主分支。
 
-- 在项目根目录 `.gitignore` 中加入 `git-playground/` 与 `git-playground-peer/`，防止练习仓库被误提交进项目主分支。
-
-### 初始化配置（练习仓库内执行）
-
-```bash
-git init -b main
-git config user.name "LosproeOcl"
-git config user.email "140792174+LosproeOcl@users.noreply.github.com"
-git remote add origin https://github.com/LosproeOcl/WUT-DevOps-Course.git
-git config remote.origin.push refs/heads/main:refs/heads/git-playground
-git config remote.origin.fetch +refs/heads/git-playground:refs/remotes/origin/main
-git config branch.main.remote origin
-git config branch.main.merge refs/heads/git-playground   # 注意：必须指向 git-playground，否则 pull 会误拉项目主分支
-```
-
-> 途中修正点：`branch.main.merge` 最初误设为 `refs/heads/main`，导致 `git pull` 去拉项目主分支而报错；已改为 `refs/heads/git-playground`。
-
-## 三、环境与执行说明
+## 三、环境与执行约定
 
 - 系统：Windows 11
 - Git：2.55.0
-- 远程认证：`gh auth login`（HTTPS + keyring）
+- 远程认证：`gh auth login`（HTTPS + keyring，账号 LosproeOcl）
 - 网络代理：`http://127.0.0.1:7897`
 - **文件类命令（`echo`/`cat`/`>>`）使用 Git Bash 执行**，以产出纯文本 LF 文件；若用 PowerShell 的 `>` 重定向会写成 UTF-16（Git 会误判为二进制）。
 
-## 四、练习总览
+> 命令约定：`$` 表示命令，`>` 表示关键输出。
 
-| # | 练习 | 核心命令 | 关键产出 |
-|---|---|---|---|
-| 1-2 | 建仓、连接、首次提交推送 | `init` `add` `commit` `push` | `48b252b` |
-| 3 | 编辑-暂存-提交-推送 | `diff` `diff --staged` | `f1c71bc` |
-| 4 | 分支合并 | `switch -c` `merge --no-ff` | `840b6e8` |
-| 5 | 合并冲突 | `merge --abort` 手动解决 | `4060096` |
-| 6 | rebase 冲突 | `rebase --abort` `rebase --continue` | `07dbc18` |
-| 7 | Pull Request | `gh pr create/merge` | PR #1，`47f7067` |
-| 8 | fetch vs pull | `fetch` `pull --ff-only` | `review.txt` 出现 |
-| 9 | 克隆模拟队友 | `clone` `pull --rebase` `--left-right` | `43bb3a5` |
-| 10 | pull 合并行为 | `pull --no-rebase` | 合并提交 `241f561` |
-| 11 | stash | `stash push/pop` | `28a8357` |
-| 12 | revert | `revert --no-edit` | `ac544cf` |
-| 13 | reset | `reset --soft HEAD~1` | `75ab3fd` |
-| 14 | restore | `restore --staged` `restore` | 丢弃编辑 |
-| 15 | 收尾检查 | `push` `log --graph` | 工作区干净 |
+---
 
-## 五、最终状态
+# 完整操作过程
 
-- 远端 `git-playground` 分支 HEAD：`75ab3fd Add the final draft`
-- 远端项目 `main` 分支：`1e3067b Ignore practice peer clone`（**未受练习影响**）
-- 本地工作区干净，`git log --graph` 包含分支提交、合并提交、rebase 重放提交、以及一次 revert。
+## Phase 0：初始化与保护现有项目
 
-完整提交图：
+### 0.1 现有项目加 .gitignore（保护项目完整性）
+
+```bash
+# E:\19284\postgraduate\WHUT-26-1\Devops&MLOps\.gitignore
+git-playground/
+```
+
+```bash
+$ git add .gitignore
+$ git commit -m "Ignore practice playground directory"
+$ git push
+> e6c9cbe..8b3a152  main -> main
+```
+
+### 0.2 创建练习仓库并配置 refspec
+
+```bash
+$ mkdir git-playground && cd git-playground
+$ git init -b main
+$ git config user.name "Yu Qingyang"
+$ git config user.email "losproeocl@gmail.com"
+$ git remote add origin https://github.com/LosproeOcl/WUT-DevOps-Course.git
+$ git config remote.origin.push refs/heads/main:refs/heads/git-playground
+$ git config remote.origin.fetch +refs/heads/git-playground:refs/remotes/origin/main
+$ git config branch.main.remote origin
+$ git config branch.main.merge refs/heads/main    # 注意：练习 8 会修正为 git-playground
+```
+
+---
+
+## 练习 1-2：建仓、连接、首次提交推送
+
+```bash
+$ echo "My Git practice notes" > notes.txt
+$ echo "Hello world" > greeting.txt
+$ echo "color=blue" > settings.txt
+
+$ git status -s
+> ?? greeting.txt
+> ?? notes.txt
+> ?? settings.txt
+
+$ git add notes.txt greeting.txt settings.txt
+$ git diff --staged
+> +Hello world
+> +My Git practice notes
+> +color=blue
+
+$ git commit -m "Create practice files"
+> [main (root-commit) 48b252b] Create practice files
+
+$ git push origin main:git-playground
+> * [new branch] main -> git-playground
+```
+
+---
+
+## 练习 3：编辑-暂存-提交-推送
+
+```bash
+$ echo "I can inspect and save changes." >> notes.txt
+$ git status -s
+>  M notes.txt
+
+$ git diff                 # 未暂存改动
+$ git add notes.txt
+$ git diff                 # 空（改动进入暂存区）
+$ git diff --staged        # 显示暂存内容
+
+$ git commit -m "Add a practice note"
+> [main f1c71bc] Add a practice note
+
+$ git log --oneline -3
+$ git push
+> 48b252b..f1c71bc  main -> git-playground
+$ git status -s            # 干净
+```
+
+---
+
+## 练习 4：创建分支并合并
+
+```bash
+$ git switch -c feature-list
+$ echo "Practice branching" > tasks.txt
+$ git add tasks.txt
+$ git commit -m "Add practice tasks"
+> [feature-list 355bb15] Add practice tasks
+
+$ git branch               # * feature-list, main
+$ git switch main
+$ ls                       # 无 tasks.txt
+
+$ git merge --no-ff feature-list -m "Merge practice tasks"
+> Merge made by the 'ort' strategy.   # 840b6e8
+
+$ cat tasks.txt
+> Practice branching
+
+$ git log --graph --oneline --all -8
+```
+
+---
+
+## 练习 5：触发并解决合并冲突
+
+```bash
+$ git switch -c friendly-greeting
+$ echo "Hello friends" > greeting.txt
+$ git add greeting.txt
+$ git commit -m "Use a friendly greeting"       # 40e3c1d
+
+$ git switch main
+$ echo "Hello team" > greeting.txt
+$ git add greeting.txt
+$ git commit -m "Use a team greeting"           # 3b90da2
+
+$ git merge friendly-greeting
+> CONFLICT (content): Merge conflict in greeting.txt
+
+$ git status -s
+> UU greeting.txt
+$ cat greeting.txt
+> <<<<<<< HEAD
+> Hello team
+> =======
+> Hello friends
+> >>>>>>> friendly-greeting
+
+$ git merge --abort         # 回到 "Hello team"
+$ git merge friendly-greeting   # 再次冲突
+$ echo "Hello team and friends" > greeting.txt
+$ git add greeting.txt
+$ git commit -m "Resolve greeting conflict"     # 4060096
+$ git status -s             # 干净
+```
+
+---
+
+## 练习 6：触发并解决 rebase 冲突
+
+```bash
+$ git switch -c color-update
+$ echo "color=green" > settings.txt
+$ git add settings.txt
+$ git commit -m "Choose green"                  # 0a8c972
+
+$ git switch main
+$ echo "color=red" > settings.txt
+$ git add settings.txt
+$ git commit -m "Choose red"                    # 4a8fbc5
+
+$ git switch color-update
+$ git rebase main
+> CONFLICT (content): Merge conflict in settings.txt
+$ cat settings.txt
+> <<<<<<< HEAD
+> color=red
+> =======
+> color=green
+> >>>>>>> 0a8c972 (Choose green)
+
+$ git rebase --abort       # 回到 color=green
+$ git rebase main          # 再次冲突
+$ echo "color=purple" > settings.txt
+$ git add settings.txt
+$ git -c core.editor=true rebase --continue
+> [detached HEAD 07dbc18] Choose green   # ID 由 0a8c972 重写为 07dbc18
+
+$ git log --oneline -3
+$ git switch main
+$ git merge --ff-only color-update
+$ cat settings.txt
+> color=purple
+$ git push
+> f1c71bc..07dbc18  main -> git-playground
+```
+
+---
+
+## 练习 7：创建并合并 Pull Request
+
+```bash
+$ git switch -c pr-notes
+$ echo "This file arrived through a pull request." > review.txt
+$ git add review.txt
+$ git commit -m "Add review notes"              # 89a212b
+$ git push -u origin pr-notes
+> * [new branch] pr-notes -> pr-notes
+
+# 使用 gh CLI 创建 PR（base=git-playground，head=pr-notes）
+$ gh pr create --repo LosproeOcl/WUT-DevOps-Course --base git-playground --head pr-notes \
+    --title "Add review notes" --body "Practice pull request (Try it yourself - exercise 7)"
+> https://github.com/LosproeOcl/WUT-DevOps-Course/pull/1
+
+$ gh pr merge 1 --repo LosproeOcl/WUT-DevOps-Course --merge --delete-branch
+# 合并方式 = "Create a merge commit"，合并提交 47f7067
+```
+
+---
+
+## 练习 8：区分 fetch 与 pull
+
+```bash
+$ git switch main
+$ git fetch origin
+> 07dbc18..47f7067  git-playground -> origin/main
+
+$ git log --oneline main..origin/main
+> 47f7067 Merge pull request #1 ...
+> 89a212b Add review notes
+
+$ git diff main origin/main      # 显示新增 review.txt
+$ ls                             # 无 review.txt（fetch 不合并）
+
+# —— 修正配置（关键）——
+$ git config branch.main.merge refs/heads/git-playground
+
+$ git pull --ff-only
+> Updating 07dbc18..47f7067  Fast-forward
+
+$ cat review.txt
+> This file arrived through a pull request.
+$ git branch -d pr-notes         # 已合并，安全删除
+```
+
+---
+
+## 练习 9：克隆第二份副本模拟队友
+
+### 9.0 现有项目追加 .gitignore
+
+```bash
+# .gitignore 追加
+git-playground-peer/
+
+$ git add .gitignore
+$ git commit -m "Ignore practice peer clone"    # 1e3067b
+$ git push
+```
+
+### 9.1 队友副本（git-playground-peer）
+
+```bash
+$ cd ..
+$ git clone https://github.com/LosproeOcl/WUT-DevOps-Course.git git-playground-peer
+$ cd git-playground-peer
+$ git switch -C main origin/git-playground      # 本地 main 指向远端 git-playground
+$ git config user.name "Yu Qingyang"
+$ git config user.email "losproeocl@gmail.com"
+$ git config remote.origin.push refs/heads/main:refs/heads/git-playground
+$ git config remote.origin.fetch +refs/heads/git-playground:refs/remotes/origin/main
+$ git config branch.main.remote origin
+$ git config branch.main.merge refs/heads/git-playground
+
+$ echo "A teammate added this note." > team.txt
+$ git add team.txt
+$ git commit -m "Add teammate note"             # 94a1ef3
+$ git push
+> 47f7067..94a1ef3  main -> git-playground
+```
+
+### 9.2 本副本（git-playground）制造分叉
+
+```bash
+$ cd ../git-playground
+$ echo "My simultaneous local change." >> notes.txt
+$ git add notes.txt
+$ git commit -m "Add local work"                # bae6af6
+
+$ git push
+> ! [rejected] main -> git-playground (fetch first)   # 历史分叉
+
+$ git fetch origin
+> 47f7067..94a1ef3  git-playground -> origin/main
+$ git log --oneline --left-right main...origin/main
+> < bae6af6 Add local work
+> > 94a1ef3 Add teammate note
+
+$ git pull --ff-only
+> fatal: Not possible to fast-forward, aborting.
+
+$ git pull --rebase                             # 重放本地提交
+$ git log --oneline -4
+> 43bb3a5 Add local work
+> 94a1ef3 Add teammate note
+$ cat team.txt                                  # 双方改动都在
+$ git push
+> 94a1ef3..43bb3a5  main -> git-playground
+```
+
+---
+
+## 练习 10：对比 pull 的合并行为
+
+```bash
+# 队友副本
+$ cd ../git-playground-peer
+$ git pull --ff-only
+$ echo "Another teammate change." >> team.txt
+$ git add team.txt
+$ git commit -m "Extend teammate note"          # ff76cd3
+$ git push
+> 43bb3a5..ff76cd3  main -> git-playground
+
+# 本副本
+$ cd ../git-playground
+$ echo "Another local change." >> notes.txt
+$ git add notes.txt
+$ git commit -m "Extend local notes"            # 2ea63a9
+$ git pull --no-rebase --no-edit                # 产生合并提交
+> Merge made by the 'ort' strategy.             # 241f561
+
+$ git log --graph --oneline -6
+$ git push
+> ff76cd3..241f561  main -> git-playground
+```
+
+---
+
+## 练习 11：stash 暂存未完成工作
+
+```bash
+$ echo "An unfinished idea." >> notes.txt
+$ git diff
+$ git stash push -m "Unfinished notes"
+> Saved working directory and index state On main: Unfinished notes
+$ git status -s        # 干净
+$ git stash list
+> stash@{0}: On main: Unfinished notes
+$ cat notes.txt        # 那行消失
+
+$ git switch feature-list
+$ git switch main
+$ git stash pop        # 恢复改动
+$ git add notes.txt
+$ git commit -m "Finish the stashed idea"       # 28a8357
+```
+
+---
+
+## 练习 12：revert 撤销已发布提交
+
+```bash
+$ echo "This file was a mistake." > mistake.txt
+$ git add mistake.txt
+$ git commit -m "Add an unwanted file"          # 6d6051f
+$ git push
+> 241f561..6d6051f  main -> git-playground
+
+$ git revert --no-edit HEAD
+> [main ac544cf] Revert "Add an unwanted file"
+$ git log --oneline -3
+$ ls                 # mistake.txt 已删除
+$ git push
+> 6d6051f..ac544cf  main -> git-playground
+```
+
+---
+
+## 练习 13：reset 重做未发布提交
+
+```bash
+$ git switch -c reset-practice
+$ echo "Draft wording" > draft.txt
+$ git add draft.txt
+$ git commit -m "Temporary draft"               # 84a4cd9
+
+$ git reset --soft HEAD~1
+$ git status -s
+> A  draft.txt           # 改动回到暂存区
+$ git diff --staged
+$ git log --oneline -2   # "Temporary draft" 已不在顶端
+
+$ echo "Final wording" > draft.txt
+$ git add draft.txt
+$ git commit -m "Add the final draft"           # 75ab3fd
+$ git switch main
+$ git merge --ff-only reset-practice
+$ cat draft.txt
+> Final wording
+```
+
+---
+
+## 练习 14：取消暂存并丢弃编辑
+
+```bash
+$ echo "An edit I do not want." >> notes.txt
+$ git add notes.txt
+$ git restore --staged notes.txt
+$ git status -s
+>  M notes.txt           # 改动仍在文件里
+$ git diff
+$ git restore notes.txt  # 丢弃改动
+$ git status -s          # 干净
+```
+
+---
+
+## 练习 15：收尾并检查
+
+```bash
+$ git push
+> ac544cf..75ab3fd  main -> git-playground
+$ git status
+> On branch main / nothing to commit, working tree clean
+$ git log --graph --oneline --decorate --all -25
+```
+
+---
+
+## 文档记录（本次追加）
+
+```bash
+$ git add README.md LOG.md
+$ git commit -m "Add README and operation log"   # d862838
+$ git push
+> 75ab3fd..d862838  main -> git-playground
+
+# 更新作者信息 + 合并文档到 README
+$ git config user.name "Yu Qingyang"
+$ git config user.email "losproeocl@gmail.com"
+$ git rm LOG.md
+$ git add README.md
+$ git commit -m "Consolidate full operation log into README, update identity"
+$ git push
+```
+
+---
+
+## 最终验证
+
+```bash
+$ gh api repos/LosproeOcl/WUT-DevOps-Course/branches
+# > git-playground -> （练习仓库最新提交）
+# > main           -> 1e3067b   （项目主分支，未受影响）
+```
+
+## 最终提交图
 
 ```
 * 75ab3fd Add the final draft
@@ -109,7 +516,7 @@ git config branch.main.merge refs/heads/git-playground   # 注意：必须指向
 * 48b252b Create practice files
 ```
 
-## 六、与 PDF 的三处差异
+## 与 PDF 的三处差异
 
 1. 首次推送：PDF 用 `git push -u origin main`，这里用 `git push origin main:git-playground`（映射到独立分支）。
 2. 练习 7 PR 的 base 分支选 `git-playground`（而非 `main`）。
