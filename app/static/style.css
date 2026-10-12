@@ -1,0 +1,19 @@
+body {
+  font-family: system-ui, sans-serif;
+  margin: 2rem;
+  line-height: 1.5;
+}
+label {
+  display: block;
+  margin-top: 0.75rem;
+}
+input {
+  display: block;
+  padding: 0.35rem;
+  margin-top: 0.25rem;
+  min-width: 16rem;
+}
+button {
+  margin-top: 1rem;
+  padding: 0.5rem 1rem;
+}
