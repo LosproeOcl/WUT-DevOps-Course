@@ -1,0 +1,40 @@
+最小可行产品-快速原型
+
+
+
+DevOps success standard
+
+1. deployment frequency	up means good
+2. change lead time（变更前置时间|变更交付周期）	down means good
+3. change fail rate		down
+4. MTTR（Mean Time to Detect & Repair）
+
+
+
+Version control
+
+state/position-save	status0: empty	
+update from empty: state 1. every state can produce new branch(e.g. 0-1,0-2,1-3,0-4,2-5,5-6,3-6,6-7,4-7).
+change copies, then combine to be a main project.
+Trunks-(tags)-branches-merges-discontinued dev branch
+every time you create state means a commit,commit is save
+'git checkout [unique id]' to change branches
+'git log --graph --all' to see branches, and 'head' instruct where you are
+'git branch' display where branch you are
+'git branch [any name]' like 'git branch feature1' would create a copy of current state at current time, after creating, they wouldn't influence each other
+merge solution means solving the problem & conflict
+remote repo(repository)pull into clones, push to repository
+
+e.g.	create a new repository on the command line
+	echo "# WUT-DevOps-Course" >> README.md
+	git init
+	git add README.md
+	git commit -m "first commit"
+	git branch -M main
+	git remote add origin git@github.com:LosproeOcl/WUT-DevOps-Course.git
+	git push -u origin main
+e.g. push an existing repository from the command line
+	git remote add origin git@github.com:LosproeOcl/WUT-DevOps-Course.git
+	git branch -M main
+	git push -u origin main
+
