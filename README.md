@@ -17,7 +17,7 @@
 | Git | 2.51 及以上 | 2.55.0（原 2.39.1，已升级） | ✅ 满足 |
 | Docker | 27 及以上 | Docker Desktop 4.94.0 / Engine 29.8.2（WSL2 后端） | ✅ 满足（`hello-world` 验证通过） |
 | DagsHub 账户 | 注册 | 未注册 | ⬜ 需用户操作 |
-| GitHub 账户 | 注册 | 未注册（gh CLI 2.100.0 已装，可辅助） | ⬜ 需用户操作 |
+| GitHub 账户 | 注册 | 已注册（gh CLI 2.100.0 已登录） | ✅ 满足 |
 
 ## 二、本次执行的操作
 
@@ -36,8 +36,9 @@
 
 - ✅ 已重启电脑；Docker Desktop 已启动，引擎正常（WSL2 后端，Engine 29.8.2），
   `docker run hello-world` 验证通过（见 `logs/docker-verify-*.log`）。
-- ⬜ 注册账户：**DagsHub**（https://dagshub.com）、**GitHub**（https://github.com）
-- ⬜ 可选：登录 GitHub CLI → `gh auth login`
+- ✅ 已登录 GitHub（账号 **LosproeOcl**，`gh auth login` 完成，HTTPS 协议 + keyring 凭据），
+  本目录已初始化为 Git 仓库并推送至 <https://github.com/LosproeOcl/WUT-DevOps-Course>（`main` 分支）。
+- ⬜ 注册账户：**DagsHub**（https://dagshub.com）
 
 ## 四、版本清单
 
@@ -58,7 +59,14 @@
 | scikit-learn | 1.9.1 |
 | GitHub CLI (gh) | 2.100.0 |
 
-## 五、日志与脚本
+## 五、课程资料
+
+- `261012L1-DevOps课前介绍.docx`：第 1 讲 DevOps 课前介绍
+- `261012L2-Version control-1Git功能场景讲解.docx`：第 2 讲 版本控制（Git 功能场景）
+- `261012L3-Version control-2Git分支管理与GitHub协作.docx`：第 3 讲 版本控制（Git 分支管理与 GitHub 协作）
+- `1. git-guide-and-practice.pdf`：Git 指南与实践
+
+## 六、日志与脚本
 
 - 日志目录：`logs/`
   - `pip-install-*.log`：Python 包安装日志
