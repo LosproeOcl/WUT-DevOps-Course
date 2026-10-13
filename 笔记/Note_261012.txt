@@ -38,3 +38,15 @@ e.g. push an existing repository from the command line
 	git branch -M main
 	git push -u origin main
 
+
+
+
+Software Testing
+
+Types:
+Function Testing & Non-Function Testing(send email or 100 req/sec)
+Unit Testing/Compnent Testing
+API or Web Services Testing
+Acceptance Testing - not an automated test
+GUI  Testing
+Load Testing
