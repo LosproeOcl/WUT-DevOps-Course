@@ -1,0 +1,15 @@
+  h3("pytest 的装饰器内部做了什么（@pytest.fixture / @pytest.mark.parametrize）"),
+  p("@pytest.fixture 的“包装”不是换标签，而是登记。拆开看一共五步："),
+  nums([
+    "打标记：被 @pytest.fixture 装饰的函数会被贴上内部标记，登记进 pytest 的一张“道具登记表”，键就是函数名（如 database_path）。函数名本身不变，也没有 wrapper 包它。",
+    "扫参数：pytest 收集到一个测试函数后，查看它的参数列表。例如 def test_x(database_path): 的参数里有 database_path，就去登记表查有没有这件道具。",
+    "注入：查到就调用这个 fixture 函数，把返回值当作 database_path 参数传进测试函数。所以“把 fixture 名字写进参数”就等于“申请使用这件道具”，名字对上是关键。",
+    "排链条：fixture 的参数也可以是别的 fixture 的名字——课程项目的 database_path(tmp_path) 里，tmp_path 是 pytest 内置的 fixture（每次提供一个全新临时目录）。pytest 按依赖关系自动排好调用顺序：先内层、后外层。",
+    "做善后：fixture 里可以写 yield：yield 之前是准备工作（建临时数据库），yield 把道具交出去，测试跑完后继续执行 yield 之后的清理工作（删临时文件，不留垃圾）。",
+  ]),
+  p("@pytest.mark.parametrize(\"year\", [1800, 2020]) 是另一种“复制”：它把一个测试函数按参数列表复制成好几份，每份代入一个值分别运行，互不影响。所以参数化测试里只有一组失败时，报告只标出那一组。"),
+  p("回到 FastAPI 的 @app.get(\"/cars\")：app 是 FastAPI() 创建出来的应用对象，get 是它上面的方法。执行到 @app.get(\"/cars\") 这一行时，FastAPI 把“GET /cars → 这个函数”登记进 app 内部的路由表（函数名同样不变）。之后浏览器请求 GET /cars，它查表找到函数、执行、把返回值回给对方。装饰器在这里的全部工作就是这一次“登记”。"),
+  note("动手练一次", [
+    "删掉 @functools.wraps(func) 后 print(add.__name__)，再加回来 print 一次，亲眼看到差异；然后 print(add.__wrapped__(2, 3)) 直接调用原函数。",
+    "写两个 fixture：一个返回列表 [1, 2, 3]，一个依赖它并返回元素个数；写一个测试函数把两个名字都写进参数，验证注入的值和顺序。",
+  ]),
