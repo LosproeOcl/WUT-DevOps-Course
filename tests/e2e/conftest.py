@@ -4,12 +4,13 @@ import threading
 import time
 
 import pytest
-import uvicorn
-from playwright.sync_api import sync_playwright
 
 
 @pytest.fixture
 def live_server(tmp_path, monkeypatch):
+    pytest.importorskip("uvicorn")
+    import uvicorn
+
     monkeypatch.setenv("CARS_DB_PATH", str(tmp_path / "cars.db"))
 
     from app.main import app
@@ -34,6 +35,9 @@ def live_server(tmp_path, monkeypatch):
 
 @pytest.fixture
 def page():
+    pytest.importorskip("playwright.sync_api")
+    from playwright.sync_api import sync_playwright
+
     with sync_playwright() as p:
         browser = p.chromium.launch()
         pg = browser.new_page()

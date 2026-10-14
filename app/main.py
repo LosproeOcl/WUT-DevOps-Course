@@ -6,7 +6,7 @@ from fastapi import Depends, FastAPI, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
-from . import database
+from . import database, mysql_database
 from .schemas import CarInput
 
 DB_ENV = "CARS_DB_PATH"
@@ -22,9 +22,14 @@ def get_db_path() -> str:
     return os.environ.get(DB_ENV, DEFAULT_DB)
 
 
+def get_storage():
+    """Select MySQL backend when CARS_DB_BACKEND=mysql, otherwise SQLite."""
+    return mysql_database if os.environ.get("CARS_DB_BACKEND") == "mysql" else database
+
+
 def get_db() -> str:
     path = get_db_path()
-    database.initialize(path)
+    get_storage().initialize(path)
     return path
 
 
@@ -41,7 +46,7 @@ def _page(body: str) -> str:
 
 
 def _list_page(db) -> str:
-    cars = database.list_cars(db)
+    cars = get_storage().list_cars(db)
     rows = "".join(
         f"<li><a href='/cars/{c.id}'>{c.make} {c.model}</a>"
         f" ({c.year}) — <a href='/cars/{c.id}/edit'>Edit car</a></li>"
@@ -138,7 +143,7 @@ def new_page():
 
 @app.get("/cars/{car_id}", response_class=HTMLResponse)
 def detail_page(car_id: int, db: str = Depends(get_db)):
-    car = database.get_car(db, car_id)
+    car = get_storage().get_car(db, car_id)
     if car is None:
         raise HTTPException(status_code=404, detail="Car not found")
     return HTMLResponse(_detail_page(car))
@@ -146,7 +151,7 @@ def detail_page(car_id: int, db: str = Depends(get_db)):
 
 @app.get("/cars/{car_id}/edit", response_class=HTMLResponse)
 def edit_page(car_id: int, db: str = Depends(get_db)):
-    car = database.get_car(db, car_id)
+    car = get_storage().get_car(db, car_id)
     if car is None:
         raise HTTPException(status_code=404, detail="Car not found")
     return HTMLResponse(_edit_page(car))
@@ -161,10 +166,10 @@ def edit_car(
     color: str = Form(...),
     db: str = Depends(get_db),
 ):
-    if database.get_car(db, car_id) is None:
+    if get_storage().get_car(db, car_id) is None:
         raise HTTPException(status_code=404, detail="Car not found")
     car_input = CarInput(make=make, model=model, year=year, color=color)
-    database.update_car(db, car_id, car_input)
+    get_storage().update_car(db, car_id, car_input)
     return RedirectResponse(f"/cars/{car_id}", status_code=303)
 
 
@@ -173,7 +178,7 @@ def edit_car(
 # --------------------------------------------------------------------------
 @app.post("/api/cars", status_code=201)
 def create_car_api(payload: CarInput, db: str = Depends(get_db)):
-    car = database.create_car(db, payload)
+    car = get_storage().create_car(db, payload)
     return JSONResponse(
         status_code=201,
         content=car.model_dump(),
@@ -183,12 +188,12 @@ def create_car_api(payload: CarInput, db: str = Depends(get_db)):
 
 @app.get("/api/cars")
 def list_cars_api(db: str = Depends(get_db)):
-    return [c.model_dump() for c in database.list_cars(db)]
+    return [c.model_dump() for c in get_storage().list_cars(db)]
 
 
 @app.get("/api/cars/{car_id}")
 def get_car_api(car_id: int, db: str = Depends(get_db)):
-    car = database.get_car(db, car_id)
+    car = get_storage().get_car(db, car_id)
     if car is None:
         raise HTTPException(status_code=404, detail="Car not found")
     return car.model_dump()
@@ -196,12 +201,12 @@ def get_car_api(car_id: int, db: str = Depends(get_db)):
 
 @app.put("/api/cars/{car_id}")
 def update_car_api(car_id: int, payload: CarInput, db: str = Depends(get_db)):
-    if database.get_car(db, car_id) is None:
+    if get_storage().get_car(db, car_id) is None:
         raise HTTPException(status_code=404, detail="Car not found")
-    return database.update_car(db, car_id, payload).model_dump()
+    return get_storage().update_car(db, car_id, payload).model_dump()
 
 
 @app.delete("/api/cars/{car_id}")
 def delete_car_api(car_id: int, db: str = Depends(get_db)):
-    database.delete_car(db, car_id)
+    get_storage().delete_car(db, car_id)
     return {"deleted": car_id}
