@@ -20,6 +20,7 @@ app = FastAPI(title="Aspect-Based Sentiment Analysis")
 
 class PredictRequest(BaseModel):
     text: str = Field(..., min_length=1)
+    model: str = "tfidf"
 
 
 @lru_cache(maxsize=1)
@@ -37,7 +38,8 @@ _PAGE = """<!doctype html>
   .header { display: flex; align-items: center; justify-content: space-between; }
   h1 { font-size: 1.5rem; }
   .lang { border: 1px solid #d1d5db; background: #fff; border-radius: 999px; padding: .35rem .9rem; cursor: pointer; font-size: .95rem; font-weight: 600; color: #2563eb; }
-  textarea { width: 100%; box-sizing: border-box; padding: .7rem; font-size: 1rem; border: 1px solid #d1d5db; border-radius: 8px; resize: vertical; }
+  textarea, select { width: 100%; box-sizing: border-box; padding: .7rem; font-size: 1rem; border: 1px solid #d1d5db; border-radius: 8px; }
+  textarea { resize: vertical; }
   button.action { padding: .6rem 1.2rem; font-size: 1rem; border: 0; border-radius: 8px; cursor: pointer; background: #2563eb; color: #fff; margin-top: .5rem; }
   button.secondary { background: #6b7280; margin-left: .5rem; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; margin-top: 1.2rem; }
@@ -56,6 +58,12 @@ _PAGE = """<!doctype html>
 <p data-i18n="subtitle">Enter a restaurant review to analyze its sentiment across four aspects.</p>
 <label data-i18n="reviewLabel">Review</label>
 <textarea id="text" rows="4" data-i18n-ph="reviewPlaceholder"></textarea>
+<label data-i18n="modelLabel">Model</label>
+<select id="model">
+  <option value="tfidf">TF-IDF + LR</option>
+  <option value="bert">BERT (bert-base-chinese)</option>
+  <option value="roberta">RoBERTa (chinese-wwm-ext)</option>
+</select>
 <div>
   <button class="action" id="predict" data-i18n="predict">Analyze</button>
   <button class="action secondary" id="demo" data-i18n="demo">Random demo sample</button>
@@ -68,6 +76,7 @@ _PAGE = """<!doctype html>
       title: "Aspect-Based Sentiment Analysis",
       subtitle: "Enter a restaurant review to analyze its sentiment across four aspects.",
       reviewLabel: "Review",
+      modelLabel: "Model",
       reviewPlaceholder: "The food was fantastic but the service was slow.",
       predict: "Analyze",
       demo: "Random demo sample",
@@ -84,6 +93,7 @@ _PAGE = """<!doctype html>
       title: "方面级情感分析",
       subtitle: "输入一条餐厅评论，分析其在四个方面的情感。",
       reviewLabel: "评论",
+      modelLabel: "模型",
       reviewPlaceholder: "食物很棒，但服务太慢了。",
       predict: "分析",
       demo: "随机演示样本",
@@ -132,7 +142,8 @@ _PAGE = """<!doctype html>
   }
 
   async function predict(text) {
-    const res = await fetch('/predict', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ text }) });
+    const model = document.getElementById('model').value;
+    const res = await fetch('/predict', { method: 'POST', headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ text, model }) });
     if (!res.ok) { const e = await res.json(); results.innerHTML = '<p>' + (e.detail || t().empty) + '</p>'; lastResult = null; return; }
     const data = await res.json();
     trueLabels = null;
@@ -161,12 +172,17 @@ def index() -> HTMLResponse:
 @app.post("/predict")
 def predict_api(req: PredictRequest) -> JSONResponse:
     try:
-        aspects = ml_model.predict_aspects(req.text)
+        aspects = ml_model.predict_aspects(req.text, req.model)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return JSONResponse({"text": req.text, "aspects": aspects})
+    return JSONResponse({"text": req.text, "model": req.model, "aspects": aspects})
+
+
+@app.get("/models")
+def models_api() -> JSONResponse:
+    return JSONResponse(ml_model.AVAILABLE_MODELS)
 
 
 @app.get("/api/demo")

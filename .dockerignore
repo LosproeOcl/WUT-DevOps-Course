@@ -19,6 +19,8 @@ mlruns/
 *.dvc
 *.md
 models/lstm.joblib
+models/bert/
+models/roberta/
 .gitignore
 .dockerignore
 .dvcignore

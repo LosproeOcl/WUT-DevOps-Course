@@ -49,7 +49,7 @@ def client(trained_model_path, demo_csv_path, monkeypatch):
     import app.model as model_mod
 
     monkeypatch.setattr(model_mod, "default_model_path", lambda: trained_model_path)
-    model_mod.load_models.cache_clear()
+    model_mod._load_tfidf.cache_clear()
     monkeypatch.setattr(main_mod, "DEMO_CSV", demo_csv_path)
     main_mod.load_demo_set.cache_clear()
 

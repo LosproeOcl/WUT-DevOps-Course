@@ -3,3 +3,4 @@ mlflow<3
 matplotlib
 dagshub
 torch
+transformers

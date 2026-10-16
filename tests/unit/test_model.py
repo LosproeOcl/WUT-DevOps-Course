@@ -4,23 +4,30 @@ from app import model as ml_model
 from ml.aspects import ASPECTS
 
 
-def test_predict_empty_text_raises(trained_model_path):
+@pytest.fixture
+def use_tfidf(trained_model_path, monkeypatch):
+    monkeypatch.setattr(ml_model, "default_model_path", lambda: trained_model_path)
+    ml_model._load_tfidf.cache_clear()
+    return trained_model_path
+
+
+def test_predict_empty_text_raises(use_tfidf):
     with pytest.raises(ValueError, match="text"):
-        ml_model.predict_aspects("", path=trained_model_path)
+        ml_model.predict_aspects("")
 
 
-def test_predict_whitespace_only_raises(trained_model_path):
+def test_predict_whitespace_only_raises(use_tfidf):
     with pytest.raises(ValueError):
-        ml_model.predict_aspects("   ", path=trained_model_path)
+        ml_model.predict_aspects("   ")
 
 
-def test_predict_missing_model_file_raises():
-    with pytest.raises(FileNotFoundError):
-        ml_model.predict_aspects("text", path="does-not-exist.joblib")
+def test_predict_unknown_model_raises(use_tfidf):
+    with pytest.raises(ValueError):
+        ml_model.predict_aspects("text", "nonexistent")
 
 
-def test_predict_returns_four_aspects(trained_model_path):
-    out = ml_model.predict_aspects("the food was great", path=trained_model_path)
+def test_predict_returns_four_aspects(use_tfidf):
+    out = ml_model.predict_aspects("the food was great")
     assert [a["aspect"] for a in out] == ASPECTS
     for a in out:
         assert set(a) == {"aspect", "label", "confidence", "distribution"}
@@ -29,7 +36,7 @@ def test_predict_returns_four_aspects(trained_model_path):
         assert sum(a["distribution"].values()) == pytest.approx(1.0, abs=1e-3)
 
 
-def test_predict_is_deterministic(trained_model_path):
-    a = ml_model.predict_aspects("the service was slow", path=trained_model_path)
-    b = ml_model.predict_aspects("the service was slow", path=trained_model_path)
+def test_predict_is_deterministic(use_tfidf):
+    a = ml_model.predict_aspects("the service was slow")
+    b = ml_model.predict_aspects("the service was slow")
     assert a == b

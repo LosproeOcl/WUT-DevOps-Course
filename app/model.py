@@ -1,4 +1,13 @@
-"""Model loading and inference helpers, separated from FastAPI for testability."""
+"""Unified model loading and inference for multiple models.
+
+Models:
+    tfidf    : TF-IDF + LogisticRegression (models/model.joblib) — default, always available
+    bert     : bert-base-chinese (models/bert/) — fine-tuned on GPU
+    roberta  : chinese-roberta-wwm-ext (models/roberta/) — fine-tuned on GPU
+
+torch/transformers are imported lazily so the slim runtime image can serve the
+TF-IDF model without the (heavy) deep-learning stack.
+"""
 from __future__ import annotations
 
 import os
@@ -9,49 +18,120 @@ import joblib
 from ml.aspects import ASPECTS, tokenize_zh
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+_MODELS_DIR = os.path.join(_ROOT, "models")
 
-# Below this confidence the aspect is reported as "neutral" (uncertain).
 UNCERTAIN_THRESHOLD = 0.55
+BERT_MAX_LEN = 128
+
+AVAILABLE_MODELS = [
+    {"key": "tfidf", "name": "TF-IDF + LR"},
+    {"key": "bert", "name": "BERT (bert-base-chinese)"},
+    {"key": "roberta", "name": "RoBERTa (chinese-wwm-ext)"},
+]
+
+_MODEL_CONFIGS = {
+    "bert": {"state_dict": "bert/bert_absa.pt", "model_dir": "bert"},
+    "roberta": {"state_dict": "roberta/roberta3_absa.pt", "model_dir": "roberta"},
+}
 
 
 def default_model_path() -> str:
-    return os.path.join(_ROOT, "models", "model.joblib")
+    return os.path.join(_MODELS_DIR, "model.joblib")
 
 
 @lru_cache(maxsize=1)
-def load_models(path: str | None = None) -> dict:
-    """Load (and cache) the dict of aspect -> fitted pipeline."""
-    path = path or default_model_path()
+def _load_tfidf():
+    path = default_model_path()
     if not os.path.exists(path):
         raise FileNotFoundError(f"model not found: {path}")
     return joblib.load(path)
 
 
-def predict_aspects(text: str, path: str | None = None) -> list[dict]:
-    """Predict sentiment for all four aspects on a single review."""
-    text = (text or "").strip()
-    if not text:
-        raise ValueError("text must not be empty")
+@lru_cache(maxsize=1)
+def _load_bert_model(key: str):
+    import torch
+    from torch import nn
+    from transformers import AutoModel, AutoTokenizer, BertConfig
 
-    models = load_models(path)
-    tokenized = tokenize_zh(text)
-    results: list[dict] = []
+    class _BertAbsa(nn.Module):
+        def __init__(self, config):
+            super().__init__()
+            self.bert = AutoModel.from_config(config)
+            hidden = self.bert.config.hidden_size
+            self.heads = nn.ModuleList([nn.Linear(hidden, 1) for _ in ASPECTS])
+
+        def forward(self, input_ids, attention_mask):
+            out = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+            cls = out.last_hidden_state[:, 0, :]
+            return torch.stack([head(cls).squeeze(-1) for head in self.heads], dim=1)
+
+    cfg = _MODEL_CONFIGS[key]
+    model_dir = os.path.join(_MODELS_DIR, cfg["model_dir"])
+    state_path = os.path.join(_MODELS_DIR, cfg["state_dict"])
+    if not os.path.exists(state_path) or not os.path.exists(model_dir):
+        raise FileNotFoundError(f"model '{key}' not downloaded yet")
+    data = torch.load(state_path, map_location="cpu", weights_only=False)
+    config = BertConfig.from_dict(data["config"])
+    model = _BertAbsa(config)
+    model.load_state_dict(data["state_dict"])
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+    return model, tokenizer
+
+
+def _result(aspect: str, label: str, confidence: float, distribution: dict) -> dict:
+    return {
+        "aspect": aspect,
+        "label": label,
+        "confidence": round(confidence, 4),
+        "distribution": {k: round(float(v), 4) for k, v in distribution.items()},
+    }
+
+
+def _predict_tfidf(tokenized: str) -> list[dict]:
+    models = _load_tfidf()
+    results = []
     for aspect in ASPECTS:
         pipeline = models.get(aspect)
         if pipeline is None:
-            results.append({"aspect": aspect, "label": None, "confidence": None, "distribution": {}})
+            results.append(_result(aspect, "neutral", 0.0, {}))
             continue
         probs = pipeline.predict_proba([tokenized])[0]
         classes = [str(c) for c in pipeline.classes_]
         best = int(probs.argmax())
         confidence = float(probs[best])
         label = classes[best] if confidence >= UNCERTAIN_THRESHOLD else "neutral"
-        results.append(
-            {
-                "aspect": aspect,
-                "label": label,
-                "confidence": round(confidence, 4),
-                "distribution": {c: round(float(p), 4) for c, p in zip(classes, probs)},
-            }
-        )
+        results.append(_result(aspect, label, confidence, dict(zip(classes, probs))))
     return results
+
+
+def _predict_bert(key: str, text: str) -> list[dict]:
+    import torch
+
+    model, tokenizer = _load_bert_model(key)
+    enc = tokenizer(text, max_length=BERT_MAX_LEN, truncation=True, padding="max_length", return_tensors="pt")
+    with torch.no_grad():
+        logits = model(enc["input_ids"], enc["attention_mask"])
+        probs = torch.sigmoid(logits)[0]
+    results = []
+    for j, aspect in enumerate(ASPECTS):
+        p = float(probs[j])
+        label = "positive" if p >= 0.5 else "negative"
+        confidence = max(p, 1.0 - p)
+        if confidence < UNCERTAIN_THRESHOLD:
+            label = "neutral"
+        results.append(_result(aspect, label, confidence, {"negative": 1.0 - p, "positive": p}))
+    return results
+
+
+def predict_aspects(text: str, model_name: str = "tfidf") -> list[dict]:
+    """Predict sentiment for all four aspects using the selected model."""
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("text must not be empty")
+
+    if model_name == "tfidf":
+        return _predict_tfidf(tokenize_zh(text))
+    if model_name in _MODEL_CONFIGS:
+        return _predict_bert(model_name, text)
+    raise ValueError(f"unknown model: {model_name}")
