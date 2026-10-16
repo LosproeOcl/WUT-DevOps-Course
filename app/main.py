@@ -61,6 +61,7 @@ _PAGE = """<!doctype html>
   <button class="action secondary" id="demo" data-i18n="demo">Random demo sample</button>
 </div>
 <div class="grid" id="results"></div>
+<p class="footnote" data-i18n="footnote" style="color:#9ca3af;font-size:.8rem;margin-top:1rem"></p>
 <script>
   const I18N = {
     en: {
@@ -77,6 +78,7 @@ _PAGE = """<!doctype html>
       hit: "hit", miss: "miss",
       empty: "Please enter a review.",
       noDemo: "No demo samples available.",
+      footnote: "Model: TF-IDF + LogisticRegression (food/service/price/ambience). 'Neutral' means confidence is below threshold (uncertain).",
     },
     zh: {
       title: "方面级情感分析",
@@ -92,6 +94,7 @@ _PAGE = """<!doctype html>
       hit: "命中", miss: "未命中",
       empty: "请输入评论。",
       noDemo: "暂无演示样本。",
+      footnote: "模型：TF-IDF + 逻辑回归（口味/服务/价格/环境）。\"中性\"表示置信度低于阈值（不确定）。",
     }
   };
   let lang = 'zh';
