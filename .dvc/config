@@ -1,4 +1,5 @@
 [core]
-    remote = local
-['remote "local"']
-    url = ../dvc-remote
+    remote = myazure
+['remote "myazure"']
+    url = azure://efreiwut-projdvc
+    account_name = efreiwut2026dvc
