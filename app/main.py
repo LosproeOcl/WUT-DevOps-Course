@@ -1,13 +1,14 @@
 """FastAPI application: interactive aspect-based sentiment analysis (4 aspects)."""
 from __future__ import annotations
 
+import io
 import os
 import random
 from functools import lru_cache
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi.responses import HTMLResponse, JSONResponse, Response
 from pydantic import BaseModel, Field
 
 from . import model as ml_model
@@ -30,70 +31,73 @@ def load_demo_set() -> pd.DataFrame:
     return pd.read_csv(DEMO_CSV)
 
 
+def _find_review_column(df: pd.DataFrame) -> str:
+    for c in df.columns:
+        if str(c).lower().strip() in ("review", "text", "comment", "content", "评论"):
+            return c
+    return df.columns[0]
+
+
 _PAGE = """<!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aspect-Based Sentiment Analysis</title>
 <style>
   :root {
-    --bg: #f5f6f7;
-    --card: #ffffff;
-    --text: #2c3e50;
-    --muted: #7f8c9b;
-    --border: #e6e8eb;
-    --accent: #467b96;
-    --accent-hover: #3a6b85;
-    --positive: #16a34a; --positive-bg: #ecf7ef;
-    --negative: #dc2626; --negative-bg: #fdf0ef;
-    --neutral: #6b7280; --neutral-bg: #f3f4f6;
+    --bg: #f7f7f7; --card: #fff; --text: #444; --muted: #999;
+    --border: #e5e5e5; --accent: #0068c1;
+    --positive: #2e9e5b; --positive-bg: #eefaf1;
+    --negative: #d9534f; --negative-bg: #fdf1f0;
+    --neutral: #8a8a8a; --neutral-bg: #f4f4f4;
   }
   * { box-sizing: border-box; }
-  body { margin: 0; background: var(--bg); color: var(--text); font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif; line-height: 1.6; }
-  .page { max-width: 760px; margin: 0 auto; padding: 2.5rem 1rem 4rem; }
-  .site-header { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 1.5rem; }
-  .site-title { margin: 0 0 .25rem; font-size: 1.6rem; font-weight: 700; }
-  .site-desc { margin: 0; color: var(--muted); font-size: .92rem; }
-  .lang { flex: 0 0 auto; margin-left: 1rem; padding: .35rem .9rem; border: 1px solid var(--border); background: var(--card); border-radius: 20px; cursor: pointer; font-size: .85rem; color: var(--accent); font-weight: 600; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: "Helvetica Neue", Helvetica, Arial, "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", sans-serif; font-size: 15px; line-height: 1.6; }
+  .page { max-width: 760px; margin: 0 auto; padding: 2rem 1rem 3rem; }
+  .site-header { margin-bottom: 1.4rem; }
+  .site-header .row { display: flex; align-items: center; justify-content: space-between; }
+  .site-title { margin: 0; font-size: 1.55rem; font-weight: 400; }
+  .site-desc { margin: .2rem 0 0; color: var(--muted); font-size: .9rem; }
+  .lang { flex: 0 0 auto; margin-left: 1rem; padding: .3rem .8rem; border: 1px solid var(--border); background: var(--card); border-radius: 4px; cursor: pointer; font-size: .85rem; color: var(--accent); }
   .lang:hover { border-color: var(--accent); }
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.5rem; box-shadow: 0 1px 3px rgba(0,0,0,.05); }
-  label { display: block; font-size: .85rem; font-weight: 600; color: var(--muted); margin: .8rem 0 .35rem; }
-  textarea, select { width: 100%; padding: .7rem .8rem; font-size: .95rem; border: 1px solid var(--border); border-radius: 8px; background: #fafbfc; color: var(--text); font-family: inherit; }
-  textarea { min-height: 110px; resize: vertical; }
-  textarea:focus, select:focus { outline: none; border-color: var(--accent); background: #fff; box-shadow: 0 0 0 3px rgba(70,123,150,.12); }
-  .actions { display: flex; gap: .6rem; margin-top: 1.1rem; }
-  .btn { display: inline-flex; align-items: center; gap: .5rem; padding: .6rem 1.3rem; font-size: .95rem; border: none; border-radius: 8px; cursor: pointer; font-weight: 600; transition: background .15s, opacity .15s; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1.4rem; margin-bottom: 1.2rem; }
+  label { display: block; font-size: .85rem; color: var(--muted); margin: .7rem 0 .3rem; }
+  textarea, select, input[type=file] { width: 100%; padding: .55rem .7rem; font-size: .95rem; border: 1px solid var(--border); border-radius: 4px; background: #fff; color: var(--text); font-family: inherit; line-height: 1.5; }
+  textarea { min-height: 100px; resize: vertical; line-height: 1.6; }
+  textarea:focus, select:focus, input[type=file]:focus { outline: none; border-color: var(--accent); }
+  .actions { display: flex; gap: .6rem; margin-top: 1rem; }
+  .btn { display: inline-flex; align-items: center; gap: .5rem; padding: .5rem 1.2rem; font-size: .92rem; border: none; border-radius: 4px; cursor: pointer; transition: background .15s, opacity .15s; }
   .btn.primary { background: var(--accent); color: #fff; }
-  .btn.primary:hover { background: var(--accent-hover); }
+  .btn.primary:hover { background: #005aa8; }
   .btn.primary:disabled { opacity: .6; cursor: not-allowed; }
-  .btn.ghost { background: transparent; color: var(--accent); border: 1px solid var(--border); }
+  .btn.ghost { background: #fff; color: var(--accent); border: 1px solid var(--border); }
   .btn.ghost:hover { border-color: var(--accent); }
-  .spinner { display: none; width: 14px; height: 14px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
-  .spinner.ghost { border-color: rgba(70,123,150,.3); border-top-color: var(--accent); }
+  .spinner { display: none; width: 13px; height: 13px; border: 2px solid rgba(255,255,255,.4); border-top-color: #fff; border-radius: 50%; animation: spin .7s linear infinite; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  .status { display: none; margin-top: 1rem; color: var(--muted); font-size: .88rem; }
+  .status { display: none; margin-top: .8rem; color: var(--muted); font-size: .86rem; }
   .status.show { display: block; }
-  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; margin-top: 1.3rem; }
-  .aspect-card { background: var(--card); border: 1px solid var(--border); border-radius: 10px; padding: 1.1rem; box-shadow: 0 1px 3px rgba(0,0,0,.04); }
-  .aspect-card h3 { margin: 0 0 .5rem; font-size: .95rem; font-weight: 600; color: var(--text); }
-  .badge { display: inline-block; padding: .18rem .7rem; border-radius: 20px; font-size: .82rem; font-weight: 600; }
+  .status.error { color: var(--negative); }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: .9rem; margin-top: 1.2rem; }
+  .aspect-card { background: var(--card); border: 1px solid var(--border); border-radius: 4px; padding: 1rem; }
+  .aspect-card h3 { margin: 0 0 .45rem; font-size: .93rem; font-weight: 400; }
+  .badge { display: inline-block; padding: .15rem .65rem; border-radius: 3px; font-size: .8rem; }
   .badge.positive { background: var(--positive-bg); color: var(--positive); }
   .badge.negative { background: var(--negative-bg); color: var(--negative); }
   .badge.neutral { background: var(--neutral-bg); color: var(--neutral); }
-  .conf { font-size: .8rem; color: var(--muted); margin-top: .45rem; }
-  .bar { height: 7px; border-radius: 4px; background: #eef0f2; margin: .35rem 0; overflow: hidden; }
-  .bar span { display: block; height: 100%; background: var(--accent); border-radius: 4px; transition: width .3s; }
-  .dist { font-size: .78rem; color: var(--muted); }
-  .reveal { font-size: .8rem; color: var(--muted); margin-top: .4rem; }
-  .footnote { color: #a8b0ba; font-size: .78rem; margin-top: 1.6rem; text-align: center; }
-  .error { color: var(--negative); }
+  .conf { font-size: .78rem; color: var(--muted); margin-top: .4rem; }
+  .bar { height: 6px; border-radius: 3px; background: #eee; margin: .3rem 0; overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+  .dist { font-size: .76rem; color: var(--muted); }
+  .reveal { font-size: .78rem; color: var(--muted); margin-top: .35rem; }
+  .footnote { color: #b0b0b0; font-size: .76rem; margin-top: 1.4rem; text-align: center; }
+  .batch-hint { font-size: .82rem; color: var(--muted); margin-top: .5rem; }
   @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
 </style></head><body>
 <div class="page">
   <header class="site-header">
-    <div>
+    <div class="row">
       <h1 class="site-title" data-i18n="title">Aspect-Based Sentiment Analysis</h1>
-      <p class="site-desc" data-i18n="subtitle">Enter a restaurant review to analyze its sentiment across four aspects.</p>
+      <button class="lang" id="lang-toggle">English</button>
     </div>
-    <button class="lang" id="lang-toggle">English</button>
+    <p class="site-desc" data-i18n="subtitle">Enter a restaurant review to analyze its sentiment across four aspects.</p>
   </header>
 
   <main class="card">
@@ -112,6 +116,17 @@ _PAGE = """<!doctype html>
     <div class="status" id="status"></div>
   </main>
 
+  <section class="card">
+    <label data-i18n="batchLabel">Batch import (CSV)</label>
+    <input type="file" id="csv-file" accept=".csv">
+    <div class="actions">
+      <button class="btn ghost" id="template" data-i18n="template">Download template</button>
+      <button class="btn ghost" id="batch" data-i18n="batch">Batch analyze</button>
+    </div>
+    <p class="batch-hint" data-i18n="batchHint"></p>
+    <div class="status" id="batch-status"></div>
+  </section>
+
   <div class="grid" id="results"></div>
   <p class="footnote" data-i18n="footnote"></p>
 </div>
@@ -126,6 +141,10 @@ _PAGE = """<!doctype html>
       predict: "Analyze",
       analyzing: "Analyzing...",
       demo: "Random demo sample",
+      batchLabel: "Batch import (CSV)",
+      template: "Download template",
+      batch: "Batch analyze",
+      batchHint: "CSV needs a 'review' column. The result adds food/service/price/ambience sentiment columns.",
       aspects: { food: "Taste / Food", service: "Service", price: "Price", ambience: "Ambience" },
       labels: { negative: "Negative", neutral: "Neutral", positive: "Positive" },
       confidence: "confidence",
@@ -134,7 +153,9 @@ _PAGE = """<!doctype html>
       empty: "Please enter a review.",
       noDemo: "No demo samples available.",
       loading: "Loading model (first run may take a few seconds)...",
-      footnote: "Model: TF-IDF + LR (default), BERT, RoBERTa. 'Neutral' means confidence is below threshold (uncertain).",
+      noFile: "Please choose a CSV file first.",
+      batchDone: "Done, downloaded results.csv",
+      footnote: "Models: TF-IDF + LR (default), BERT, RoBERTa. 'Neutral' means confidence below threshold.",
     },
     zh: {
       title: "方面级情感分析",
@@ -145,6 +166,10 @@ _PAGE = """<!doctype html>
       predict: "分析",
       analyzing: "分析中…",
       demo: "随机演示样本",
+      batchLabel: "批量导入（CSV）",
+      template: "下载模板",
+      batch: "批量分析",
+      batchHint: "CSV 需包含 review 列；结果会在原文件基础上新增 food/service/price/ambience 四列情感结果。",
       aspects: { food: "口味", service: "服务", price: "价格", ambience: "环境" },
       labels: { negative: "负面", neutral: "中性", positive: "正面" },
       confidence: "置信度",
@@ -153,7 +178,9 @@ _PAGE = """<!doctype html>
       empty: "请输入评论。",
       noDemo: "暂无演示样本。",
       loading: "正在加载模型（首次运行可能需要几秒）…",
-      footnote: "模型：TF-IDF + 逻辑回归（默认）、BERT、RoBERTa。「中性」表示置信度低于阈值（不确定）。",
+      noFile: "请先选择 CSV 文件。",
+      batchDone: "处理完成，已下载 results.csv",
+      footnote: "模型：TF-IDF + 逻辑回归（默认）、BERT、RoBERTa。「中性」表示置信度低于阈值。",
     }
   };
   let lang = 'zh';
@@ -223,6 +250,29 @@ _PAGE = """<!doctype html>
     trueLabels = d.labels;
     predict(d.text);
   });
+  document.getElementById('template').addEventListener('click', () => { window.location.href = '/api/template'; });
+  document.getElementById('batch').addEventListener('click', async () => {
+    const file = document.getElementById('csv-file').files[0];
+    const bs = document.getElementById('batch-status');
+    if (!file) { bs.className = 'status show error'; bs.textContent = t().noFile; return; }
+    const fd = new FormData();
+    fd.append('file', file);
+    fd.append('model', document.getElementById('model').value);
+    bs.className = 'status show';
+    bs.textContent = t().analyzing;
+    try {
+      const res = await fetch('/api/predict-csv', { method: 'POST', body: fd });
+      if (!res.ok) { const e = await res.json().catch(() => ({})); bs.className = 'status show error'; bs.textContent = e.detail || 'error'; return; }
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = 'results.csv'; a.click();
+      URL.revokeObjectURL(url);
+      bs.className = 'status show'; bs.textContent = t().batchDone;
+    } catch (e) {
+      bs.className = 'status show error'; bs.textContent = String(e);
+    }
+  });
   applyLang();
 </script>
 </body></html>"""
@@ -247,6 +297,48 @@ def predict_api(req: PredictRequest) -> JSONResponse:
 @app.get("/models")
 def models_api() -> JSONResponse:
     return JSONResponse(ml_model.AVAILABLE_MODELS)
+
+
+@app.get("/api/template")
+def template_api() -> Response:
+    csv_bytes = "review\n食物很好吃服务也很好\n价格有点贵环境一般般\n".encode("utf-8-sig")
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=template.csv"},
+    )
+
+
+@app.post("/api/predict-csv")
+async def predict_csv(file: UploadFile = File(...), model: str = Form("tfidf")) -> Response:  # noqa: B008
+    content = await file.read()
+    try:
+        df = pd.read_csv(io.BytesIO(content))
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"invalid CSV: {exc}") from exc
+    if df.empty:
+        raise HTTPException(status_code=422, detail="CSV is empty")
+
+    review_col = _find_review_column(df)
+    out = df.copy()
+    aspect_cols = ["food", "service", "price", "ambience"]
+    for col in aspect_cols:
+        out[f"{col}_sentiment"] = ""
+
+    try:
+        for idx, text in enumerate(df[review_col].astype(str)):
+            aspects = ml_model.predict_aspects(text, model)
+            for a in aspects:
+                out.at[idx, f"{a['aspect']}_sentiment"] = a["label"]
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
+
+    csv_bytes = out.to_csv(index=False).encode("utf-8-sig")
+    return Response(
+        content=csv_bytes,
+        media_type="text/csv",
+        headers={"Content-Disposition": "attachment; filename=results.csv"},
+    )
 
 
 @app.get("/api/demo")

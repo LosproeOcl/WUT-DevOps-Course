@@ -42,3 +42,24 @@ def test_demo_returns_reserved_sample(client):
     data = resp.json()
     assert data["text"]
     assert isinstance(data["labels"], dict)
+
+
+def test_template_returns_csv(client):
+    resp = client.get("/api/template")
+    assert resp.status_code == 200
+    assert "review" in resp.text
+    assert "text/csv" in resp.headers["content-type"]
+
+
+def test_predict_csv_adds_sentiment_columns(client):
+    csv_content = "review\n食物很好吃\n服务很差\n"
+    resp = client.post(
+        "/api/predict-csv",
+        files={"file": ("test.csv", csv_content.encode("utf-8"), "text/csv")},
+        data={"model": "tfidf"},
+    )
+    assert resp.status_code == 200
+    body = resp.text
+    for col in ["food_sentiment", "service_sentiment", "price_sentiment", "ambience_sentiment"]:
+        assert col in body
+    assert "食物很好吃" in body
