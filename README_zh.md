@@ -38,23 +38,21 @@ Dockerfile
 
 ## 开发历程
 
-这是塑造了整个项目的一系列决策和弯路，按发生顺序记录。
+选题受硬件约束：本机仅具备 CPU，初期不计划租赁算力；单维度情感分类过于基础，故定为多维度的方面级情感分析，以在作业期限内保证交付完整性。餐厅评论场景适配交互演示与测试集预留的需要。
 
-课程作业要求的是一个训练或微调过模型的 ML 应用，带数据版本管理、实验跟踪、Git、Docker 和 CI/CD，还要有交互演示、保留一部分测试集。餐厅评论的方面级情感分析正好对上这份要求：演示本身很直观——输入一条评论，得到各维度的情感；保留测试集的需求也顺理成章地退化成一个小型的、不参与评估的 `demo.csv`。选它是因为合适，而不是因为任务有多新。
+开发前先修复本机环境。五个 Python 安装共享同一 user site-packages，一次中断的 pip 升级遗留 `~umpy`、`~ip`、`~crypt` 目录，`import sklearn` 报 `numpy.core.multiarray failed to import`。统一至 `C:\Python312`、清理残留并重装 numpy，此后全程使用项目独立 `.venv`。
 
-正式写代码之前，得先修机器。机器上同时装着五个 Python，共用一个 user site-packages，还残留着一次中断的 `pip` 升级留下的 `~umpy`、`~ip`、`~crypt` 文件夹，`import sklearn` 直接报 `numpy.core.multiarray failed to import`。把环境统一到 `C:\Python312`、删掉残留、重装 numpy，这件事花了比预期更多的时间，也决定了后面所有工作都放在项目独立的 `.venv` 里，不再碰全局环境。
+数据更换两次。初始为英文 SemEval-2014；开发中明确"四维度输出 + 中英双语"的定位，标注由 aspect-term 迁移至 aspect-category，并引入中文语料。MAMS 托管于 Google Drive，获取不便；改采美团点评 ASAP——中文、GitHub 托管、约 46,850 条、18 个 category 归并为四个维度，规模较 SemEval 高一个量级。中文采用字符级切分，规避分词词典依赖。
 
-数据集换过两次。最初用英文 SemEval-2014 餐厅评论，两个需求让它维持不下去：一是应用要输出四个固定维度，标注就得从"方面词"改成"方面类别"；二是界面要双语、要支持中文。MAMS 是中文 ABSA 的标准语料，但挂在 Google Drive 上，下载不顺。美团点评的 ASAP 更合适——中文、在 GitHub 上、约 46,850 条、18 个方面类别正好能归并成四个维度，比 SemEval 大一个量级。中文按字符切分，省掉了词典依赖。
+模型迭代最多。基线为 TF-IDF + LR，置信度约 0.45，根因是 neutral 类标签分布混杂；收敛为二分类、对低置信度预测标注 neutral 后，macro-F1 与置信度同步回升。深度模型依赖 GPU，本机不具备；CPU 训练的 BiLSTM 因样本量不足未达预期，最终以 5 元租赁 AutoDL 的 RTX 3080 Ti 完成 BERT 与 RoBERTa 微调。二者在多维度混合句子上优于基线，但未全面领先，且 CPU 推理开销高，三个模型均保留、运行时切换，TF-IDF 为默认。
 
-模型是改动最多的部分。先上 TF-IDF + LR 做基线，0.45 左右的置信度不是校准问题，而是"中性"这个类太模糊、成了大杂烩；去掉它改成二分类之后，macro-F1 和置信度才真正上去。再想用深度模型超过这个基线，就需要 GPU，而笔记本没有，于是租了 AutoDL。CPU 上的 BiLSTM 因为数据不够没跑出名堂，在 AutoDL 上微调 BERT 和 RoBERTa 才见效。它们在多维度混合的句子上确实更好，但不是全面领先，而且 CPU 推理慢，所以三个模型都留了下来，运行时切换，TF-IDF 当默认。
+DVC 远端迁移一次。初期无 Azure 账号，以本地目录占位；取得学生账号后创建 Storage Account 与容器，远端切换至 Azure Blob。首次 push 大文件遭遇 socket 超时，系国内至 Azure 的间歇性延迟，重试完成。
 
-DVC 的远端搬过一次。一开始没有 Azure 账号，先用本地目录顶着。拿到 Azure 学生账号之后，建了存储账户和容器，把远端切到 Azure Blob。第一次 push 大文件时报 socket 超时，是国内访问 Azure 的间歇性问题，重试就过了。
+实验跟踪遵循课程 MLflow 指南，先本地、后 DagsHub；MLflow 3.x 的 `CreateLoggedModel` 端点未被 DagsHub 2.x 服务端实现，客户端锁定 `mlflow<3`。
 
-实验跟踪按课程的 MLflow 指南走，先本地、再 DagsHub。这一步踩到一个版本冲突：MLflow 3.x 调的 `CreateLoggedModel` 端点在 DagsHub 的 2.x 服务器上不存在，最后把客户端锁在 `mlflow<3`。
+应用由单一 `/predict` 端点扩展至四维输出、双语界面、模型切换、CSV 批量导入导出、记录 CRUD，最终拆分分析页与历史页。期间一处隐蔽故障：Python 三引号字符串内 `'\n'` 在生成 JS 中成为字面换行，脚本整体失效，以 `String.fromCharCode` 规避。
 
-应用本身从单个 `/predict` 端点一点点长起来：四维度输出、双语界面、模型选择、CSV 批量导入导出、保存记录增删改查，最后拆成分析和历史两个页面。最烦人的一个 bug 是 Python 三引号字符串里的 `'\n'` 在生成的 JS 里变成了真实换行，整页按钮全部失灵，最后用 `String.fromCharCode` 绕开。
-
-CI/CD 用 GitHub Actions，按课程指南配：发 PR 跑 ruff、pytest 和 Docker 构建，推 staging/main 发布镜像。镜像是 `python:3.12-slim`，只带运行时依赖——torch 和 transformers 懒加载，避免把两 GB 的深度学习栈塞进镜像。
+CI/CD 采用 GitHub Actions：PR 触发 ruff、pytest、Docker 构建，push 至 staging/main 发布镜像。镜像基于 `python:3.12-slim`，仅含运行时依赖，torch/transformers 懒加载。
 
 ## 环境配置
 
