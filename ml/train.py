@@ -60,10 +60,10 @@ def data_checksum(path: str) -> str:
 
 def build_pipeline(mode: str) -> Pipeline:
     if mode == "baseline":
-        vectorizer = TfidfVectorizer(min_df=2)
+        vectorizer = TfidfVectorizer(min_df=2, token_pattern=r"\S+")
         classifier = LogisticRegression(max_iter=1000, random_state=42)
     elif mode == "tuned":
-        vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=2, sublinear_tf=True)
+        vectorizer = TfidfVectorizer(ngram_range=(1, 2), min_df=2, sublinear_tf=True, token_pattern=r"\S+")
         classifier = LogisticRegression(max_iter=2000, C=0.5, class_weight="balanced", random_state=42)
     else:
         raise ValueError(f"unknown mode: {mode}")

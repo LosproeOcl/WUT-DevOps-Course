@@ -1,21 +1,29 @@
-"""Shared aspect definitions: category mapping + bilingual display names.
+"""Shared aspect definitions: category mapping + bilingual display names + tokenizer.
 
 The four coarse aspects the app reports are:
     food (口味) / service (服务) / price (价格) / ambience (环境)
 
-Fine-grained MAMS categories are merged into these four.
+The ASAP (Meituan) fine-grained categories are merged into these four.
 """
 from __future__ import annotations
 
-# Fine-grained category -> coarse aspect
-CATEGORY_TO_ASPECT = {
-    "food": "food",
-    "menu": "food",
-    "service": "service",
-    "staff": "service",
-    "price": "price",
-    "ambience": "ambience",
-    "place": "ambience",
+# ASAP (Meituan) fine-grained category -> coarse aspect
+ASAP_ASPECT_MAP = {
+    "Food#Portion": "food",
+    "Food#Taste": "food",
+    "Food#Appearance": "food",
+    "Food#Recommend": "food",
+    "Service#Queue": "service",
+    "Service#Hospitality": "service",
+    "Service#Parking": "service",
+    "Service#Timely": "service",
+    "Price#Level": "price",
+    "Price#Cost_effective": "price",
+    "Price#Discount": "price",
+    "Ambience#Decoration": "ambience",
+    "Ambience#Noise": "ambience",
+    "Ambience#Space": "ambience",
+    "Ambience#Sanitary": "ambience",
 }
 
 ASPECTS = ["food", "service", "price", "ambience"]
@@ -33,4 +41,13 @@ BINARY_LABELS = ["negative", "positive"]
 
 def map_category(category: str) -> str | None:
     """Return the coarse aspect for a fine-grained category, or None to drop it."""
-    return CATEGORY_TO_ASPECT.get(category.lower())
+    return ASAP_ASPECT_MAP.get(category)
+
+
+def tokenize_zh(text: str) -> str:
+    """Tokenize Chinese text into space-separated characters.
+
+    Character-level segmentation is fast and works well for Chinese sentiment
+    classification (small vocabulary, no external dictionary needed).
+    """
+    return " ".join(str(text))

@@ -1,65 +1,50 @@
-"""Data pipeline for the MAMS-ACSA restaurant aspect-category dataset.
+"""Data pipeline for the ASAP (Meituan) Chinese restaurant aspect dataset.
 
-Parses the raw XML (per-sentence `<aspectCategory category polarity>` pairs),
-maps fine-grained categories to the four coarse aspects, and writes v1/v2 CSVs.
+Parses the ASAP CSV files into (text, aspect, polarity, label) rows, maps the 18
+fine-grained categories to the four coarse aspects, and writes v1/v2 CSVs.
 
 Output CSV columns: text, aspect, polarity, label, split
     aspect    : one of food / service / price / ambience
-    polarity  : 1 (positive) / 0 (neutral) / -1 (negative)
+    polarity  : 1 (positive) / 0 (neutral) / -1 (negative); -2 (not mentioned) is dropped
     label     : positive / neutral / negative
 """
 from __future__ import annotations
 
 import argparse
 import os
-import re
 import sys
-import xml.etree.ElementTree as ET
 
 import pandas as pd
 
-from .aspects import ASPECTS, map_category
+from .aspects import ASAP_ASPECT_MAP, ASPECTS, tokenize_zh
 
-POLARITY_TO_LABEL = {"positive": 1, "neutral": 0, "negative": -1}
-LABEL_TO_POLARITY = {v: k for k, v in POLARITY_TO_LABEL.items()}
+POLARITY_TO_LABEL = {1: "positive", 0: "neutral", -1: "negative"}
 
 COLUMNS = ["text", "aspect", "polarity", "label", "split"]
 
-_WS = re.compile(r"\s+")
+SPLITS = {"train": "train.csv", "dev": "dev.csv", "test": "test.csv"}
 
 
-def parse_xml_file(path: str) -> list[dict]:
-    """Parse a MAMS ACSA XML file into (text, aspect, polarity) records."""
-    tree = ET.parse(path)
-    records: list[dict] = []
-    for sentence in tree.getroot().findall("sentence"):
-        text_el = sentence.find("text")
-        text = text_el.text if text_el is not None and text_el.text else ""
-        text = _WS.sub(" ", text).strip()
-        for ac in sentence.findall(".//aspectCategory"):
-            category = ac.get("category", "").lower()
-            polarity = ac.get("polarity", "").lower()
-            aspect = map_category(category)
-            if aspect is None or polarity not in POLARITY_TO_LABEL:
-                continue
-            records.append(
-                {
-                    "text": text,
-                    "aspect": aspect,
-                    "polarity": POLARITY_TO_LABEL[polarity],
-                    "label": polarity,
-                }
-            )
-    return records
+def parse_asap_csv(path: str) -> pd.DataFrame:
+    df = pd.read_csv(path)
+    frames = []
+    for col, aspect in ASAP_ASPECT_MAP.items():
+        if col not in df.columns:
+            continue
+        sub = df[df[col] != -2][["review", col]].copy()
+        sub.columns = ["text", "polarity"]
+        sub["aspect"] = aspect
+        sub["label"] = sub["polarity"].map(POLARITY_TO_LABEL)
+        frames.append(sub[["text", "aspect", "polarity", "label"]])
+    return pd.concat(frames, ignore_index=True)
 
 
 def build_dataframe(raw_dir: str) -> pd.DataFrame:
     frames = []
-    for split, filename in [("train", "train.xml"), ("val", "val.xml"), ("test", "test.xml")]:
+    for split, filename in SPLITS.items():
         path = os.path.join(raw_dir, filename)
-        records = parse_xml_file(path)
-        df = pd.DataFrame(records, columns=COLUMNS[:4])
-        df["split"] = split
+        df = parse_asap_csv(path)
+        df["split"] = "val" if split == "dev" else split
         frames.append(df)
     return pd.concat(frames, ignore_index=True)
 
@@ -70,7 +55,9 @@ def build_v1(df: pd.DataFrame) -> pd.DataFrame:
 
 def build_v2(df: pd.DataFrame) -> pd.DataFrame:
     out = df.copy()
-    out["text"] = out["text"].str.lower().str.strip()
+    unique_texts = out["text"].unique()
+    tokenized = {t: tokenize_zh(t) for t in unique_texts}
+    out["text"] = out["text"].map(tokenized).str.strip()
     out = out.drop_duplicates(subset=["text", "aspect", "label"]).reset_index(drop=True)
     return out[COLUMNS]
 
@@ -81,7 +68,7 @@ def save(df: pd.DataFrame, path: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build v1/v2 aspect-category datasets")
+    parser = argparse.ArgumentParser(description="Build v1/v2 aspect-category datasets (ASAP)")
     parser.add_argument("--raw-dir", default="data/raw")
     parser.add_argument("--out-dir", default="data/processed")
     args = parser.parse_args()

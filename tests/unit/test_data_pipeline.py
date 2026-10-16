@@ -1,75 +1,59 @@
 import pandas as pd
 
-from ml.aspects import ASPECTS, map_category
-from ml.data_pipeline import build_v2, parse_xml_file
+from ml.aspects import ASPECTS, map_category, tokenize_zh
+from ml.data_pipeline import build_v2, parse_asap_csv
 
-SAMPLE_XML = """<?xml version="1.0" encoding="utf-8"?>
-<sentences>
-  <sentence>
-    <text>The food was great but the service was slow.</text>
-    <aspectCategories>
-      <aspectCategory category="food" polarity="positive"/>
-      <aspectCategory category="service" polarity="negative"/>
-    </aspectCategories>
-  </sentence>
-  <sentence>
-    <text>Reasonable price and nice ambience.</text>
-    <aspectCategories>
-      <aspectCategory category="price" polarity="neutral"/>
-      <aspectCategory category="miscellaneous" polarity="neutral"/>
-    </aspectCategories>
-  </sentence>
-</sentences>
-"""
+SAMPLE_CSV = (
+    "id,review,star,Food#Taste,Service#Hospitality,Price#Level,Ambience#Decoration\n"
+    "1,食物很棒,5,1,1,-2,1\n"
+    "2,服务一般,3,-2,0,-2,-2\n"
+    "3,价格太贵,2,-2,-2,-1,-2\n"
+)
 
 
 def test_map_category_maps_and_drops():
-    assert map_category("food") == "food"
-    assert map_category("menu") == "food"
-    assert map_category("staff") == "service"
-    assert map_category("ambience") == "ambience"
-    assert map_category("place") == "ambience"
-    assert map_category("miscellaneous") is None
-    assert map_category("UNKNOWN") is None
+    assert map_category("Food#Taste") == "food"
+    assert map_category("Food#Portion") == "food"
+    assert map_category("Service#Hospitality") == "service"
+    assert map_category("Price#Level") == "price"
+    assert map_category("Ambience#Decoration") == "ambience"
+    assert map_category("Location#Transportation") is None
+    assert map_category("Unknown") is None
 
 
-def test_parse_xml_file_extracts_aspects(tmp_path):
-    xml = tmp_path / "sample.xml"
-    xml.write_text(SAMPLE_XML, encoding="utf-8")
-    records = parse_xml_file(str(xml))
-    # 3 aspectCategory rows survive (miscellaneous is dropped)
-    assert len(records) == 3
-    food = next(r for r in records if r["aspect"] == "food")
-    assert food["label"] == "positive"
-    assert food["polarity"] == 1
-    assert any(r["aspect"] == "service" and r["label"] == "negative" for r in records)
-    assert any(r["aspect"] == "price" and r["label"] == "neutral" for r in records)
-    assert not any(r["aspect"] == "miscellaneous" for r in records)
+def test_tokenize_zh_splits_chars():
+    assert tokenize_zh("食物很棒") == "食 物 很 棒"
 
 
-def test_parse_xml_file_handles_empty_text(tmp_path):
-    xml = tmp_path / "empty.xml"
-    xml.write_text(
-        '<?xml version="1.0"?><sentences><sentence><text> </text>'
-        '<aspectCategories><aspectCategory category="food" polarity="positive"/>'
-        "</aspectCategories></sentence></sentences>",
-        encoding="utf-8",
-    )
-    records = parse_xml_file(str(xml))
-    assert len(records) == 1
-    assert records[0]["text"] == ""
+def test_parse_asap_csv_extracts_aspects(tmp_path):
+    csv = tmp_path / "t.csv"
+    csv.write_text(SAMPLE_CSV, encoding="utf-8")
+    df = parse_asap_csv(str(csv))
+    assert len(df) == 5
+    assert set(df["aspect"]) == {"food", "service", "price", "ambience"}
+    assert (df[df["aspect"] == "food"]["label"] == "positive").all()
+    assert set(df[df["aspect"] == "service"]["label"]) == {"positive", "neutral"}
+    assert (df[df["aspect"] == "price"]["label"] == "negative").all()
+    assert (df[df["aspect"] == "ambience"]["label"] == "positive").all()
 
 
-def test_build_v2_deduplicates():
+def test_parse_asap_csv_drops_unmentioned(tmp_path):
+    csv = tmp_path / "t.csv"
+    csv.write_text(SAMPLE_CSV, encoding="utf-8")
+    df = parse_asap_csv(str(csv))
+    assert -2 not in df["polarity"].tolist()
+
+
+def test_build_v2_tokenizes_and_deduplicates():
     df = pd.DataFrame(
         [
-            {"text": "great food", "aspect": "food", "polarity": 1, "label": "positive", "split": "train"},
-            {"text": "great food", "aspect": "food", "polarity": 1, "label": "positive", "split": "train"},
+            {"text": "食物很棒", "aspect": "food", "polarity": 1, "label": "positive", "split": "train"},
+            {"text": "食物很棒", "aspect": "food", "polarity": 1, "label": "positive", "split": "train"},
         ]
     )
     v2 = build_v2(df)
     assert len(v2) == 1
-    assert v2.iloc[0]["text"] == "great food"
+    assert v2.iloc[0]["text"] == "食 物 很 棒"
 
 
 def test_aspects_are_four():

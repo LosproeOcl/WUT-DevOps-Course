@@ -1,12 +1,11 @@
-"""Download the MAMS-ACSA restaurant aspect-category sentiment dataset.
+"""Download the ASAP Chinese restaurant aspect-category sentiment dataset.
 
-Source: https://github.com/siat-nlp/MAMS-for-ABSA (MAMS: Multi-Aspect
-Multi-Sentiment). The `MAMS-ACSA/raw` files are XML with, per sentence, a set
-of `<aspectCategory category="..." polarity="..."/>` annotations.
+Source: https://github.com/Meituan-Dianping/asap (ASAP: A Chinese Review Dataset
+Towards Aspect Category Sentiment Analysis and Rating Prediction). ~46k reviews
+with 18 aspect categories (Food/Service/Price/Ambience/Location), each annotated
+with polarity -1/0/1 (-2 = aspect not mentioned).
 
-Note: this raw snapshot contains the *English* restaurant reviews (reformatted
-from SemEval-2014); the full Chinese MAMS data is a separate, much larger
-download from the MAMS authors.
+License: Apache-2.0.
 """
 from __future__ import annotations
 
@@ -14,9 +13,9 @@ import os
 import sys
 import urllib.request
 
-BASE_URL = "https://raw.githubusercontent.com/siat-nlp/MAMS-for-ABSA/master/data/MAMS-ACSA/raw"
+BASE_URL = "https://raw.githubusercontent.com/Meituan-Dianping/asap/master/data"
 
-FILES = {"train.xml": "train", "val.xml": "val", "test.xml": "test"}
+FILES = {"train.csv": "train", "dev.csv": "val", "test.csv": "test"}
 
 
 def download(raw_dir: str) -> dict[str, str]:

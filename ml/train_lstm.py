@@ -19,7 +19,7 @@ import pandas as pd
 import torch
 from torch import nn
 
-from .aspects import ASPECTS, BINARY_LABELS
+from .aspects import ASPECTS, BINARY_LABELS, tokenize_zh
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(ROOT, "data", "processed")
@@ -29,9 +29,9 @@ MODEL_NAME = "absa_restaurant_lstm"
 
 EMBED_DIM = 128
 HIDDEN_DIM = 128
-MAX_LEN = 60
-EPOCHS = 8
-BATCH_SIZE = 32
+MAX_LEN = 100
+EPOCHS = 5
+BATCH_SIZE = 64
 LR = 1e-3
 THRESHOLD = 0.55
 
@@ -132,7 +132,7 @@ class LstmAbsaModel(mlflow.pyfunc.PythonModel):
 
     def predict(self, context, model_input, params=None):
         texts = model_input["text"].astype(str).tolist()
-        X = self.vocab.encode_batch(texts)
+        X = self.vocab.encode_batch([tokenize_zh(t) for t in texts])
         rows = []
         with torch.no_grad():
             for i, text in enumerate(texts):

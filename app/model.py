@@ -6,7 +6,7 @@ from functools import lru_cache
 
 import joblib
 
-from ml.aspects import ASPECTS
+from ml.aspects import ASPECTS, tokenize_zh
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
@@ -34,13 +34,14 @@ def predict_aspects(text: str, path: str | None = None) -> list[dict]:
         raise ValueError("text must not be empty")
 
     models = load_models(path)
+    tokenized = tokenize_zh(text)
     results: list[dict] = []
     for aspect in ASPECTS:
         pipeline = models.get(aspect)
         if pipeline is None:
             results.append({"aspect": aspect, "label": None, "confidence": None, "distribution": {}})
             continue
-        probs = pipeline.predict_proba([text])[0]
+        probs = pipeline.predict_proba([tokenized])[0]
         classes = [str(c) for c in pipeline.classes_]
         best = int(probs.argmax())
         confidence = float(probs[best])
