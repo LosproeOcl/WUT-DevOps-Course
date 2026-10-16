@@ -1,0 +1,9 @@
+# Ignore anything DVC should not track
+.venv/
+__pycache__/
+*.pyc
+.git/
+.pytest_cache/
+mlruns/
+.idea/
+.vscode/

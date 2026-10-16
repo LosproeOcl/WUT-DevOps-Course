@@ -1,0 +1,20 @@
+# Hyperparameter configurations
+
+## baseline
+vectorizer:
+  min_df: 2
+classifier:
+  name: LogisticRegression
+  max_iter: 1000
+  class_weight: null
+
+## tuned
+vectorizer:
+  ngram_range: [1, 2]
+  min_df: 2
+  sublinear_tf: true
+classifier:
+  name: LogisticRegression
+  max_iter: 2000
+  C: 0.5
+  class_weight: balanced

@@ -1,0 +1,27 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# ---- Environment & secrets ----
+.env
+*.env
+
+# ---- MLflow local run history ----
+/mlruns/
+
+# ---- Data: tracked by DVC, not git ----
+/data/raw/
+/data/processed/
+
+# ---- IDE / OS ----
+.idea/
+.vscode/
+.DS_Store
+Thumbs.db

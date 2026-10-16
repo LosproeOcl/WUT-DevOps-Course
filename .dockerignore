@@ -1,0 +1,23 @@
+.git/
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.env
+
+# not needed for serving
+tests/
+ml/
+scripts/
+.github/
+data/raw/
+data/processed/
+mlruns/
+.dvc/
+*.dvc
+*.md
+.gitignore
+.dockerignore
+.dvcignore
