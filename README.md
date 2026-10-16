@@ -4,15 +4,15 @@
 
 A web app that takes a Chinese restaurant review and classifies its sentiment across four aspects — **taste / service / price / ambience** — each marked positive, negative, or neutral.
 
-It started as the final project for a DevOps & MLOps course. Along the way it turned into a small but complete MLOps pipeline: DVC for data, MLflow for experiments, Docker + GitHub Actions for CI/CD, and a FastAPI app with a bilingual UI, three selectable models, CSV batch import/export, and CRUD for saved results.
+This is the final project for a DevOps & MLOps course. It ended up as a small end-to-end MLOps pipeline: DVC for data, MLflow for experiments, Docker + GitHub Actions for CI/CD, and a FastAPI app with a bilingual UI, three selectable models, CSV batch import/export, and CRUD for saved results.
 
 ## What the app does
 
 - Two pages: `/` (analyze) and `/history` (saved records).
-- Enter one review → four aspects with label + confidence + probability bars.
-- Pick a model: TF-IDF + LR, BERT, or RoBERTa.
-- Upload a CSV → batch-analyze every row, save results, download a CSV with the original columns plus sentiment/confidence/probability columns.
-- Saved results go to a SQLite database, managed on `/history`: view, edit, single/batch delete, export CSV.
+- One review in → four aspects with label + confidence + probability bars.
+- Three models to choose from: TF-IDF + LR, BERT, RoBERTa.
+- CSV upload → batch-analyze each row, save results, download a CSV with original columns plus sentiment/confidence/probability columns.
+- Saved results live in SQLite, managed on `/history`: view, edit, single/batch delete, export CSV.
 - UI switches between Chinese and English.
 
 ## Repo layout
@@ -36,6 +36,51 @@ tests/               pytest unit + API tests
 Dockerfile
 ```
 
+## Project journey
+
+Written in the order things actually happened, decisions included.
+
+### 1. Picking a topic
+
+The assignment (see `PracticeIntro/project-instructions.pdf`) asked for an ML app that trains or fine-tunes a model, with dataset versioning, experiment tracking, Git, Docker, and CI/CD, plus an interactive demo that reserves part of the test set. Aspect-based sentiment analysis on restaurant reviews fits well: the demo is "type a review, get per-aspect sentiment", and the reserved-set requirement is naturally a small `demo.csv` held out of evaluation.
+
+### 2. Local environment
+
+Before any code, the machine itself was broken. It had five Python installs (Microsoft Store 3.11, `C:\Python312`, Anaconda, 3.8, a VS-bundled 3.9) sharing one user site-packages, plus `~umpy`/`~ip`/`~crypt` folders left by an interrupted `pip` upgrade. `import sklearn` died with `numpy.core.multiarray failed to import`. I consolidated everything onto `C:\Python312`, deleted the `~`-prefixed leftovers, and reinstalled numpy. That one fix took longer than expected and shaped the rest of the project: from then on I used a project-local `.venv`.
+
+### 3. Data: from English to Chinese
+
+I started with SemEval-2014 restaurant reviews (English). Two requirements forced a rethink:
+
+- The app must output **four fixed aspects** (taste/service/price/ambience), so I moved from aspect-term to aspect-category labeling.
+- The UI must be bilingual and support Chinese input, so I needed a Chinese dataset.
+
+MAMS (siat-nlp) is the canonical Chinese ABSA dataset, but the actual corpus is on Google Drive and hard to fetch. **ASAP** (Meituan-Dianping) turned out to be the better fit: Chinese, hosted on GitHub, ~46,850 reviews, with 18 aspect categories that map cleanly to the four aspects, and about 10x larger than SemEval. Chinese text is tokenized at the character level — fast, no dictionary dependency, small vocab.
+
+### 4. Models: TF-IDF → LSTM → BERT/RoBERTa
+
+TF-IDF + LR came first. Its confidence numbers were ~0.45, which turned out to be honest: the "neutral" class was a catch-all. Dropping neutral and going binary (positive/negative) raised both macro-F1 and confidence without any inflation. Calibrating or forcing higher confidence only made numbers look good while hurting F1, so I skipped that.
+
+Then I wanted a deep model to beat it. My laptop has no NVIDIA GPU (Intel Iris Xe only), and fine-tuning a transformer on CPU would take hours, so I rented an **AutoDL** box (RTX 3080 Ti, pay-by-hour). I tried BiLSTM on CPU first — it underperformed because there wasn't enough data. On AutoDL I fine-tuned BERT (`bert-base-chinese`) and RoBERTa (`chinese-roberta-wwm-ext`).
+
+The result: BERT/RoBERTa beat TF-IDF on ambiguous multi-aspect sentences but not everywhere, and they're slow on CPU. So I **kept all three** behind a model selector — TF-IDF as the fast default, BERT/RoBERTa as options when accuracy matters more than speed.
+
+### 5. DVC: local directory → Azure Blob
+
+At first I had no Azure account, so I pointed DVC at a local directory to simulate a remote. The course guide (`7. DVC-with-Azure-Blob-Storage.pdf`) assumes Azure. Later I got an Azure student account (EFREI email, $100 credit), created a Storage Account and a blob container, and switched the remote to Azure Blob. First `dvc push` hit `Timeout on reading data from socket` on the large files — an intermittent China-to-Azure issue — and retrying finished it.
+
+### 6. MLflow + DagsHub
+
+Following the course's MLflow guide (`15-MLFlow.pdf`), I used local tracking first, then pointed MLflow at DagsHub. That surfaced a version clash: MLflow 3.x uses a `CreateLoggedModel` endpoint that DagsHub's 2.x server doesn't support (`INVALID_PARAMETER_VALUE`), so I pinned `mlflow<3`. Runs and registered models now land on DagsHub.
+
+### 7. The app grew
+
+It started as a single `/predict` endpoint and accumulated: 4-aspect output, bilingual UI, a model selector, CSV batch import/export, saved-review CRUD, and finally a split into two pages (analyze + history). Along the way a `'\n'` inside the Python triple-quoted HTML string became a literal newline in the generated JS and silently broke every button — replaced with `String.fromCharCode(10)`.
+
+### 8. CI/CD
+
+GitHub Actions per the course guide (`3-1. GITHUB_ACTIONS_GUIDE.pdf`): a PR to the protected branches runs ruff + pytest + a Docker build; pushing to `staging`/`main` publishes images. The Docker image is `python:3.12-slim` with runtime deps only — torch/transformers are lazy-imported so the image doesn't carry the ~2 GB deep-learning stack.
+
 ## Environment
 
 Python 3.12 in a project venv:
@@ -46,24 +91,24 @@ python -m venv .venv
 pip install -r requirements-ml.txt -r requirements-dev.txt
 ```
 
-Three requirement files, split by purpose:
-
-| File | What it's for |
-|------|---------------|
-| `requirements.txt` | runtime only (fastapi, uvicorn, joblib, scikit-learn, numpy, pandas, python-multipart) |
+| File | Purpose |
+|------|---------|
+| `requirements.txt` | runtime (fastapi, uvicorn, joblib, scikit-learn, numpy, pandas, python-multipart) |
 | `requirements-ml.txt` | training + deep-model serving (mlflow<3, matplotlib, dagshub, torch, transformers) |
 | `requirements-dev.txt` | pytest, httpx, ruff |
 
-Environment variables for DagsHub tracking (tokens stay out of git):
+Environment variables (tokens stay out of git):
 
 | Variable | Meaning |
 |----------|---------|
 | `DAGSHUB_REPO_OWNER` / `DAGSHUB_REPO_NAME` | DagsHub repo, e.g. `losproeocl` / `WUT-DevOps-Course` |
 | `MLFLOW_TRACKING_USERNAME` / `MLFLOW_TRACKING_PASSWORD` | DagsHub username / access token |
+| `REVIEWS_DB_PATH` | optional; path to the saved-reviews SQLite DB |
+| `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` | GitHub Actions secrets for image publishing |
 
 ## Data
 
-Dataset is **ASAP** (Meituan-Dianping/asap): ~46,850 Chinese restaurant reviews, each annotated with 18 fine-grained aspect categories. `ml/aspects.py` maps them to the four coarse aspects:
+ASAP (Meituan-Dianping/asap), ~46,850 Chinese reviews, 18 aspect categories mapped to four:
 
 | Aspect | ASAP categories |
 |--------|-----------------|
@@ -72,33 +117,27 @@ Dataset is **ASAP** (Meituan-Dianping/asap): ~46,850 Chinese restaurant reviews,
 | price | Price#Level, Price#Cost_effective, Price#Discount |
 | ambience | Ambience#Decoration, Ambience#Noise, Ambience#Space, Ambience#Sanitary |
 
-Polarity is `1`/`0`/`-1` (`-2` means "not mentioned" and is dropped). Chinese is tokenized at the character level — fast, no dictionary dependency, small vocab.
-
-DVC tracks `data/raw` and `data/processed`. The remote is Azure Blob Storage:
+Polarity is `1`/`0`/`-1` (`-2` = not mentioned, dropped). DVC tracks `data/raw` and `data/processed`, remote on Azure Blob:
 
 ```bash
 dvc remote add -d myazure azure://efreiwut-projdvc
 dvc remote modify myazure account_name efreiwut2026dvc
-dvc remote modify --local myazure connection_string "<secret>"   # goes to .dvc/config.local, gitignored
+dvc remote modify --local myazure connection_string "<secret>"   # .dvc/config.local, gitignored
 dvc push
 ```
 
-Two processed versions exist: `v1` (raw text) and `v2` (char-tokenized + deduplicated).
+Two versions: `v1` (raw) and `v2` (char-tokenized + deduplicated).
 
 ## Models and training
 
-Three models were tried. The task is binary per aspect (positive vs negative); the murky "neutral" class is dropped at training time, and predictions below a confidence threshold are reported as neutral.
+Binary per aspect (positive vs negative); the "neutral" class is dropped at training time, and low-confidence predictions are reported as neutral.
 
-| Model | Where | macro-F1 (food/service/price/ambience) |
+| Model | Where | macro-F1 (taste/service/price/ambience) |
 |-------|-------|------------------------------------------|
 | TF-IDF + LR (tuned) | CPU, `ml/train.py` | 0.738 / 0.784 / 0.786 / 0.760 |
 | BiLSTM | CPU, `ml/train_lstm.py` | weaker on this data |
-| BERT (bert-base-chinese, 3 epochs) | AutoDL GPU, `ml/train_bert.py` | 0.758 / 0.806 / 0.758 / 0.824 |
-| RoBERTa (chinese-wwm-ext, 3 epochs) | AutoDL GPU | 0.765 / 0.803 / 0.763 / 0.789 |
-
-BERT/RoBERTa were fine-tuned on an AutoDL RTX 3080 Ti. The TF-IDF + LR model stays the default because it runs instantly on CPU and is competitive; BERT is the best for ambiguous multi-aspect sentences.
-
-Training commands:
+| BERT (bert-base-chinese, 3 ep) | AutoDL GPU, `ml/train_bert.py` | 0.758 / 0.806 / 0.758 / 0.824 |
+| RoBERTa (chinese-wwm-ext, 3 ep) | AutoDL GPU | 0.765 / 0.803 / 0.763 / 0.789 |
 
 ```bash
 python -m ml.data_pipeline              # build v1/v2 CSVs
@@ -107,53 +146,43 @@ python -m ml.train_lstm --data-version v2           # BiLSTM
 python -m ml.train_bert --data-dir data --epochs 3  # BERT/RoBERTa (GPU recommended)
 ```
 
-## Experiments and model registry
+Registered on DagsHub: `absa_restaurant` (unified TF-IDF+LR), `absa_restaurant_lstm`, `absa_restaurant_bert`, `absa_restaurant_roberta`.
 
-MLflow tracks every run (git SHA, data checksum, hyperparams, per-aspect metrics) and registers models. Tracking goes to DagsHub when the env vars above are set, otherwise to a local `mlruns/`. Registered models on DagsHub:
+## Course requirements, mapped
 
-`absa_restaurant` (unified TF-IDF+LR), `absa_restaurant_lstm`, `absa_restaurant_bert`, `absa_restaurant_roberta`.
+| Requirement (from `project-instructions.pdf`) | Where it's met |
+|-----------------------------------------------|----------------|
+| Train or fine-tune a model | BERT/RoBERTa fine-tuned on GPU |
+| Dataset with multiple versions | ASAP, DVC `v1`/`v2` |
+| 3+ tests with edge cases | 33 pytest tests (unit + API) |
+| Git branching (main/staging/dev) | plus `finalProject_sentimentAnalysis` |
+| Docker (slim Dockerfile + .dockerignore) | `python:3.12-slim`, `.dockerignore` |
+| CI/CD (PR: test+lint+docker build, deploy) | `.github/workflows/ci.yml` |
+| DVC (Azure remote, 2+ versions) | Azure Blob, `v1`/`v2` |
+| MLflow (2+ experiments, registry) | baseline vs tuned; model registry on DagsHub |
+| Interactive app + reserved test set | `data/demo.csv`, held out of evaluation |
 
-Note: DagsHub's MLflow server is 2.x, so the client must be `mlflow<3`.
+## Bugs, quick reference
 
-## CI/CD and Docker
+- `numpy.core.multiarray failed to import` → multiple Pythons sharing user site + `~` leftovers; consolidated on C:\Python312 and deleted them.
+- Confidence ~0.45 → "neutral" was a catch-all; went binary.
+- Small data capped models → switched to ASAP (~10x bigger).
+- `CreateLoggedModel` → `INVALID_PARAMETER_VALUE` → pin `mlflow<3` (DagsHub server is 2.x).
+- `process() takes no keyword arguments` on AutoDL → `wget` the model from hf-mirror, load from a local path.
+- Empty TF-IDF features for Chinese → `token_pattern=r"\S+"` (default drops single CJK chars).
+- JS buttons dead → `'\n'` in the triple-quoted HTML became a real newline; use `String.fromCharCode(10)`.
+- 400 MB weights → gitignored (LSTM DVC-tracked; TF-IDF ~30 MB committed).
+- 5 epochs overfit → 3 is the sweet spot.
+- Azure push timeout → intermittent, retry.
 
-`.github/workflows/ci.yml`:
-
-- PR to `dev`/`staging`/`main`/`finalProject_sentimentAnalysis`: ruff + pytest + docker build.
-- push to `staging`: publish `:staging` image; push to `main`: publish `:latest`.
-
-`Dockerfile` is `python:3.12-slim` with runtime deps only. torch/transformers are lazy-imported, so the image serves the TF-IDF model without the ~2 GB deep-learning stack.
-
-## Problems I hit, and how I fixed them
-
-1. **Broken numpy/scipy across multiple Python installs.** The machine had five Pythons sharing one user site-packages, and an interrupted `pip` upgrade left `~umpy`/`~ip`/`~crypt` folders. `import sklearn` failed with `numpy.core.multiarray failed to import`. Fixed by picking C:\Python312, deleting the `~`-prefixed leftovers, and reinstalling numpy.
-
-2. **Confidence numbers were meaningless.** The first 3-class model reported ~0.45 confidence because the "neutral" class was a catch-all. Dropping neutral and going binary raised both macro-F1 and confidence honestly — calibrating or forcing higher confidence only inflated numbers while hurting F1, so I didn't.
-
-3. **Small dataset capped the models.** The English SemEval data (~3k reviews) was too small for any deep model to matter. Switched to ASAP (~46,850 Chinese reviews); price alone went from ~400 to ~39k rows.
-
-4. **MLflow 3.x can't talk to DagsHub.** `CreateLoggedModel` returned `INVALID_PARAMETER_VALUE` because DagsHub's server is 2.x. Pinned `mlflow<3`.
-
-5. **huggingface_hub + httpx2 download bug.** On AutoDL, `AutoTokenizer.from_pretrained` died with `process() takes no keyword arguments`. Worked around by downloading the model files with `wget` from hf-mirror and loading from a local path.
-
-6. **TF-IDF produced empty features for Chinese.** The default `token_pattern=\b\w\w+\b` drops single CJK characters. Set `token_pattern=r"\S+"`.
-
-7. **The whole page's JS stopped working once.** A `'\n'` inside the Python triple-quoted HTML string became a literal newline in the generated JS, which broke `buffer.indexOf('...')` and killed the script. Replaced escapes with `String.fromCharCode(10)`.
-
-8. **400 MB model weights shouldn't live in git.** BERT/RoBERTa state dicts are ~440 MB each; they're gitignored (and DVC-tracked for the LSTM), with the TF-IDF model (~30 MB) committed for Docker.
-
-9. **More epochs made the model worse.** RoBERTa at 5 epochs overfit (train loss 0.12, test F1 dropped). Three epochs is the sweet spot on this dataset.
-
-10. **Azure push timing out from China.** First `dvc push` hit `Timeout on reading data from socket` on the large files. It was intermittent; retrying finished the job.
-
-## Running it
+## Running
 
 ```bash
 python -m uvicorn app.main:app --reload      # or: python -m app.main
-# http://127.0.0.1:8000  (analyze)  /history (saved records)
+# http://127.0.0.1:8000 (analyze)  /history (saved records)
 
 docker build -t absa-app .
 docker run -p 8000:8000 absa-app
 ```
 
-Run tests with `python -m pytest` and lint with `ruff check app ml tests scripts`.
+Tests: `python -m pytest`; lint: `ruff check app ml tests scripts`.
