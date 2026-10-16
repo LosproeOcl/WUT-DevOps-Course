@@ -121,19 +121,67 @@ python -m ml.train_bert --data-dir data --epochs 3  # BERT/RoBERTa (GPU recommen
 
 Registered on DagsHub: `absa_restaurant` (unified TF-IDF+LR), `absa_restaurant_lstm`, `absa_restaurant_bert`, `absa_restaurant_roberta`.
 
-## Course requirements, mapped
+## Course requirements — configuration guide
 
-| Requirement (from `project-instructions.pdf`) | Where it's met |
-|-----------------------------------------------|----------------|
-| Train or fine-tune a model | BERT/RoBERTa fine-tuned on GPU |
-| Dataset with multiple versions | ASAP, DVC `v1`/`v2` |
-| 3+ tests with edge cases | 33 pytest tests (unit + API) |
-| Git branching (main/staging/dev) | plus `finalProject_sentimentAnalysis` |
-| Docker (slim Dockerfile + .dockerignore) | `python:3.12-slim`, `.dockerignore` |
-| CI/CD (PR: test+lint+docker build, deploy) | `.github/workflows/ci.yml` |
-| DVC (Azure remote, 2+ versions) | Azure Blob, `v1`/`v2` |
-| MLflow (2+ experiments, registry) | baseline vs tuned; model registry on DagsHub |
-| Interactive app + reserved test set | `data/demo.csv`, held out of evaluation |
+Every requirement from `project-instructions.pdf`, with the steps to reproduce it.
+
+### The app
+
+**Train or fine-tune a model.** TF-IDF + LR is trained by `ml/train.py`; BERT/RoBERTa are fine-tuned by `ml/train_bert.py` (GPU recommended).
+
+```bash
+python -m ml.data_pipeline
+python -m ml.train --data-version v2 --mode tuned
+python -m ml.train_bert --data-dir data --epochs 3
+```
+
+**Dataset versions.** `data/processed/{train,val,test}_v1.csv` (raw) and `_v2.csv` (char-tokenized + deduplicated). Regenerate with `python -m ml.data_pipeline`.
+
+**Tests.** 33 pytest tests under `tests/` (unit + API), covering empty/whitespace input, unknown model, CSV import/export, CRUD, and batch delete. Run `python -m pytest`.
+
+### DevOps
+
+**Version control.** Branch model `main` ← `staging` ← `dev` ← `feature/*`; the deliverable is on `finalProject_sentimentAnalysis`.
+
+```bash
+git switch -c feature/xxx
+git push -u origin feature/xxx   # then open a PR into dev, then staging, then main
+```
+
+**Docker.** `Dockerfile` (`python:3.12-slim`) with a `.dockerignore` that excludes `tests/`, `ml/`, `scripts/`, `data/raw`, `data/processed`, `mlruns/`, `.dvc/`, and the large model weights.
+
+```bash
+docker build -t absa-app .
+docker run -p 8000:8000 absa-app
+```
+
+**CI/CD.** `.github/workflows/ci.yml` triggers on PR/push to protected branches and runs `ruff check app ml tests scripts`, `python -m pytest`, then `docker build -t absa-app:ci .`. Enable branch protection (GitHub → Settings → Branches) so a PR cannot merge while CI fails. Set `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` under Settings → Secrets → Actions for image publishing.
+
+### MLOps
+
+**DVC.**
+
+```bash
+dvc init
+dvc remote add -d myazure azure://efreiwut-projdvc
+dvc remote modify myazure account_name efreiwut2026dvc
+dvc remote modify --local myazure connection_string "<secret>"   # .dvc/config.local, gitignored
+dvc add data/raw data/processed
+dvc push
+```
+
+`ml/README_data.md` records the two versions and the v1 → v2 changes.
+
+**MLflow.** Set `DAGSHUB_REPO_OWNER` / `DAGSHUB_REPO_NAME` and `MLFLOW_TRACKING_USERNAME` / `MLFLOW_TRACKING_PASSWORD`, then run training — `ml/train.py` logs the git SHA, data checksum, hyperparameters, metrics, and model, and registers it. `ml/README_experiments.md` documents the baseline vs tuned comparison; `mlflow ui` shows the local history.
+
+### Repo structure
+
+```
+app/  ml/  data/  models/  scripts/  tests/
+requirements.txt  requirements-ml.txt  requirements-dev.txt
+Dockerfile  .dockerignore  .github/workflows/ci.yml
+README.md  README_zh.md  DEPLOYMENT.md
+```
 
 ## Bugs, quick reference
 

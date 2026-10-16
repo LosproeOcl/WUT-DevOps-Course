@@ -121,19 +121,67 @@ python -m ml.train_bert --data-dir data --epochs 3  # BERT/RoBERTa（建议 GPU�
 
 DagsHub 上注册：`absa_restaurant`（统一 TF-IDF+LR）、`absa_restaurant_lstm`、`absa_restaurant_bert`、`absa_restaurant_roberta`。
 
-## 课程要求对照
+## 课程要求对照 — 配置指示
 
-| 要求（来自 `project-instructions.pdf`） | 对应实现 |
-|----------------------------------------|----------|
-| 训练/微调模型 | GPU 上微调 BERT/RoBERTa |
-| 数据集多版本 | ASAP，DVC `v1`/`v2` |
-| 3+ 个带边界用例的测试 | 33 个 pytest 测试（单元 + 接口） |
-| Git 分支（main/staging/dev） | 外加 `finalProject_sentimentAnalysis` |
-| Docker（精简 Dockerfile + .dockerignore） | `python:3.12-slim`、`.dockerignore` |
-| CI/CD（PR 跑 test+lint+docker build、部署） | `.github/workflows/ci.yml` |
-| DVC（Azure 远端、2+ 版本） | Azure Blob、`v1`/`v2` |
-| MLflow（2+ 实验、模型注册） | baseline vs tuned；DagsHub 模型注册 |
-| 交互应用 + 保留测试集 | `data/demo.csv`，不参与评估 |
+`project-instructions.pdf` 的每项要求，附复现步骤。
+
+### 应用
+
+**训练/微调模型。** TF-IDF + LR 由 `ml/train.py` 训练；BERT/RoBERTa 由 `ml/train_bert.py` 微调（建议 GPU）。
+
+```bash
+python -m ml.data_pipeline
+python -m ml.train --data-version v2 --mode tuned
+python -m ml.train_bert --data-dir data --epochs 3
+```
+
+**数据集多版本。** `data/processed/{train,val,test}_v1.csv`（原始）与 `_v2.csv`（字符分词 + 去重），用 `python -m ml.data_pipeline` 重新生成。
+
+**测试。** `tests/` 下 33 个 pytest 测试（单元 + 接口），覆盖空/空白输入、未知模型、CSV 导入导出、CRUD、批量删除。运行 `python -m pytest`。
+
+### DevOps
+
+**版本控制。** 分支模型 `main` ← `staging` ← `dev` ← `feature/*`；交付在 `finalProject_sentimentAnalysis`。
+
+```bash
+git switch -c feature/xxx
+git push -u origin feature/xxx   # 再依次向 dev、staging、main 发起 PR
+```
+
+**Docker。** `Dockerfile`（`python:3.12-slim`）配 `.dockerignore`，排除 `tests/`、`ml/`、`scripts/`、`data/raw`、`data/processed`、`mlruns/`、`.dvc/` 与大模型权重。
+
+```bash
+docker build -t absa-app .
+docker run -p 8000:8000 absa-app
+```
+
+**CI/CD。** `.github/workflows/ci.yml` 在 PR/push 到受保护分支时运行 `ruff check app ml tests scripts`、`python -m pytest`，再 `docker build -t absa-app:ci .`。在 GitHub → Settings → Branches 开启分支保护，使 CI 失败时 PR 无法合并；在 Settings → Secrets → Actions 配置 `DOCKERHUB_USERNAME` / `DOCKERHUB_TOKEN` 用于发布镜像。
+
+### MLOps
+
+**DVC。**
+
+```bash
+dvc init
+dvc remote add -d myazure azure://efreiwut-projdvc
+dvc remote modify myazure account_name efreiwut2026dvc
+dvc remote modify --local myazure connection_string "<密钥>"   # .dvc/config.local，已 gitignore
+dvc add data/raw data/processed
+dvc push
+```
+
+`ml/README_data.md` 记录两个版本及 v1 → v2 的变化。
+
+**MLflow。** 设置 `DAGSHUB_REPO_OWNER` / `DAGSHUB_REPO_NAME` 与 `MLFLOW_TRACKING_USERNAME` / `MLFLOW_TRACKING_PASSWORD` 后运行训练——`ml/train.py` 记录 git SHA、数据校验和、超参数、指标与模型并注册。`ml/README_experiments.md` 记录 baseline 与 tuned 的对比；`mlflow ui` 查看本地历史。
+
+### 目录结构
+
+```
+app/  ml/  data/  models/  scripts/  tests/
+requirements.txt  requirements-ml.txt  requirements-dev.txt
+Dockerfile  .dockerignore  .github/workflows/ci.yml
+README.md  README_zh.md  DEPLOYMENT.md
+```
 
 ## 踩坑速查
 
