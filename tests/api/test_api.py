@@ -51,7 +51,9 @@ def test_template_returns_csv(client):
     assert "text/csv" in resp.headers["content-type"]
 
 
-def test_predict_csv_adds_sentiment_columns(client):
+def test_predict_csv_streams_progress_and_result(client):
+    import json
+
     csv_content = "review\n食物很好吃\n服务很差\n"
     resp = client.post(
         "/api/predict-csv",
@@ -59,7 +61,13 @@ def test_predict_csv_adds_sentiment_columns(client):
         data={"model": "tfidf"},
     )
     assert resp.status_code == 200
-    body = resp.text
+    lines = [ln for ln in resp.text.strip().split("\n") if ln]
+    msgs = [json.loads(ln) for ln in lines]
+    progress = [m for m in msgs if m["type"] == "progress"]
+    result = [m for m in msgs if m["type"] == "result"]
+    assert len(progress) == 2
+    assert progress[-1]["done"] == 2 and progress[-1]["total"] == 2
+    assert len(result) == 1
     for col in ["food_sentiment", "service_sentiment", "price_sentiment", "ambience_sentiment"]:
-        assert col in body
-    assert "食物很好吃" in body
+        assert col in result[0]["csv"]
+    assert "食物很好吃" in result[0]["csv"]

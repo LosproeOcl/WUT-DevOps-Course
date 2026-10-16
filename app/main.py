@@ -2,13 +2,14 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import random
 from functools import lru_cache
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, Response
+from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
 from . import model as ml_model
@@ -89,6 +90,10 @@ _PAGE = """<!doctype html>
   .reveal { font-size: .78rem; color: var(--muted); margin-top: .35rem; }
   .footnote { color: #b0b0b0; font-size: .76rem; margin-top: 1.4rem; text-align: center; }
   .batch-hint { font-size: .82rem; color: var(--muted); margin-top: .5rem; }
+  .progress { display: none; height: 6px; border-radius: 3px; background: #eee; margin-top: .8rem; overflow: hidden; }
+  .progress.show { display: block; }
+  .progress-fill { height: 100%; width: 0; background: var(--accent); transition: width .2s; }
+  .progress-text { font-size: .8rem; color: var(--muted); margin-top: .3rem; }
   @media (max-width: 560px) { .grid { grid-template-columns: 1fr; } }
 </style></head><body>
 <div class="page">
@@ -124,6 +129,8 @@ _PAGE = """<!doctype html>
       <button class="btn ghost" id="batch" data-i18n="batch">Batch analyze</button>
     </div>
     <p class="batch-hint" data-i18n="batchHint"></p>
+    <div class="progress" id="batch-progress"><div class="progress-fill" id="batch-progress-fill"></div></div>
+    <div class="progress-text" id="batch-progress-text"></div>
     <div class="status" id="batch-status"></div>
   </section>
 
@@ -254,23 +261,50 @@ _PAGE = """<!doctype html>
   document.getElementById('batch').addEventListener('click', async () => {
     const file = document.getElementById('csv-file').files[0];
     const bs = document.getElementById('batch-status');
+    const prog = document.getElementById('batch-progress');
+    const fill = document.getElementById('batch-progress-fill');
+    const ptext = document.getElementById('batch-progress-text');
     if (!file) { bs.className = 'status show error'; bs.textContent = t().noFile; return; }
     const fd = new FormData();
     fd.append('file', file);
     fd.append('model', document.getElementById('model').value);
-    bs.className = 'status show';
-    bs.textContent = t().analyzing;
+    bs.className = 'status'; bs.textContent = '';
+    prog.className = 'progress show'; fill.style.width = '0%'; ptext.textContent = '';
     try {
       const res = await fetch('/api/predict-csv', { method: 'POST', body: fd });
-      if (!res.ok) { const e = await res.json().catch(() => ({})); bs.className = 'status show error'; bs.textContent = e.detail || 'error'; return; }
-      const blob = await res.blob();
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url; a.download = 'results.csv'; a.click();
-      URL.revokeObjectURL(url);
-      bs.className = 'status show'; bs.textContent = t().batchDone;
+      if (!res.ok) { const e = await res.json().catch(() => ({})); bs.className = 'status show error'; bs.textContent = e.detail || 'error'; prog.className = 'progress'; return; }
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder('utf-8');
+      let buffer = '';
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+        let nl;
+        while ((nl = buffer.indexOf('\n')) >= 0) {
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) continue;
+          const msg = JSON.parse(line);
+          if (msg.type === 'progress') {
+            fill.style.width = Math.round(msg.done / msg.total * 100) + '%';
+            ptext.textContent = msg.done + ' / ' + msg.total;
+          } else if (msg.type === 'error') {
+            bs.className = 'status show error'; bs.textContent = msg.detail;
+          } else if (msg.type === 'result') {
+            const blob = new Blob(['\uFEFF' + msg.csv], { type: 'text/csv;charset=utf-8' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url; a.download = msg.filename; a.click();
+            URL.revokeObjectURL(url);
+            bs.className = 'status show'; bs.textContent = t().batchDone;
+          }
+        }
+      }
+      prog.className = 'progress';
     } catch (e) {
       bs.className = 'status show error'; bs.textContent = String(e);
+      prog.className = 'progress';
     }
   });
   applyLang();
@@ -310,7 +344,7 @@ def template_api() -> Response:
 
 
 @app.post("/api/predict-csv")
-async def predict_csv(file: UploadFile = File(...), model: str = Form("tfidf")) -> Response:  # noqa: B008
+async def predict_csv(file: UploadFile = File(...), model: str = Form("tfidf")) -> StreamingResponse:  # noqa: B008
     content = await file.read()
     try:
         df = pd.read_csv(io.BytesIO(content))
@@ -320,25 +354,27 @@ async def predict_csv(file: UploadFile = File(...), model: str = Form("tfidf")) 
         raise HTTPException(status_code=422, detail="CSV is empty")
 
     review_col = _find_review_column(df)
-    out = df.copy()
-    aspect_cols = ["food", "service", "price", "ambience"]
-    for col in aspect_cols:
-        out[f"{col}_sentiment"] = ""
+    total = len(df)
 
-    try:
-        for idx, text in enumerate(df[review_col].astype(str)):
-            aspects = ml_model.predict_aspects(text, model)
-            for a in aspects:
-                out.at[idx, f"{a['aspect']}_sentiment"] = a["label"]
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=str(exc)) from exc
+    def generate():
+        out = df.copy()
+        for aspect in ["food", "service", "price", "ambience"]:
+            out[f"{aspect}_sentiment"] = ""
+        try:
+            for idx, text in enumerate(df[review_col].astype(str)):
+                aspects = ml_model.predict_aspects(text, model)
+                for a in aspects:
+                    out.at[idx, f"{a['aspect']}_sentiment"] = a["label"]
+                yield json.dumps({"type": "progress", "done": idx + 1, "total": total}, ensure_ascii=False) + "\n"
+        except FileNotFoundError as exc:
+            yield json.dumps({"type": "error", "detail": str(exc)}, ensure_ascii=False) + "\n"
+            return
+        yield json.dumps(
+            {"type": "result", "filename": "results.csv", "csv": out.to_csv(index=False)},
+            ensure_ascii=False,
+        ) + "\n"
 
-    csv_bytes = out.to_csv(index=False).encode("utf-8-sig")
-    return Response(
-        content=csv_bytes,
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=results.csv"},
-    )
+    return StreamingResponse(generate(), media_type="application/x-ndjson")
 
 
 @app.get("/api/demo")
