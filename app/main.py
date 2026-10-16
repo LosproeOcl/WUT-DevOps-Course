@@ -12,12 +12,20 @@ from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
 from pydantic import BaseModel, Field
 
+from . import database
 from . import model as ml_model
+from .schemas import ReviewInput
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEMO_CSV = os.path.join(_ROOT, "data", "demo.csv")
+REVIEWS_DB_ENV = "REVIEWS_DB_PATH"
+DEFAULT_DB = os.path.join(_ROOT, "reviews.db")
 
 app = FastAPI(title="Aspect-Based Sentiment Analysis")
+
+
+def get_db_path() -> str:
+    return os.environ.get(REVIEWS_DB_ENV, DEFAULT_DB)
 
 
 class PredictRequest(BaseModel):
@@ -89,6 +97,16 @@ _PAGE = """<!doctype html>
   .dist { font-size: .76rem; color: var(--muted); }
   .reveal { font-size: .78rem; color: var(--muted); margin-top: .35rem; }
   .footnote { color: #b0b0b0; font-size: .76rem; margin-top: 1.4rem; text-align: center; }
+  .section-title { margin: 0 0 .8rem; font-size: 1rem; font-weight: 400; }
+  .history-item { border: 1px solid var(--border); border-radius: 4px; padding: .8rem; margin-bottom: .6rem; background: #fafafa; }
+  .history-text { font-size: .9rem; color: var(--text); margin-bottom: .4rem; word-break: break-all; }
+  .history-tags { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: .5rem; }
+  .history-meta { font-size: .78rem; color: var(--muted); margin-bottom: .4rem; }
+  .history-actions { display: flex; gap: .5rem; }
+  .link { background: none; border: none; color: var(--accent); cursor: pointer; font-size: .82rem; padding: 0; }
+  .link:hover { text-decoration: underline; }
+  .link.danger { color: var(--negative); }
+  .empty-hint { color: var(--muted); font-size: .85rem; }
   .batch-hint { font-size: .82rem; color: var(--muted); margin-top: .5rem; }
   .progress { display: none; height: 6px; border-radius: 3px; background: #eee; margin-top: .8rem; overflow: hidden; }
   .progress.show { display: block; }
@@ -116,10 +134,16 @@ _PAGE = """<!doctype html>
     </select>
     <div class="actions">
       <button class="btn primary" id="predict"><span class="spinner" id="spinner"></span><span data-i18n="predict">Analyze</span></button>
+      <button class="btn ghost" id="save" data-i18n="save">Save result</button>
       <button class="btn ghost" id="demo" data-i18n="demo">Random demo sample</button>
     </div>
     <div class="status" id="status"></div>
   </main>
+
+  <section class="card">
+    <h2 class="section-title" data-i18n="historyLabel">Saved history</h2>
+    <div id="history"></div>
+  </section>
 
   <section class="card">
     <label data-i18n="batchLabel">Batch import (CSV)</label>
@@ -162,6 +186,12 @@ _PAGE = """<!doctype html>
       loading: "Loading model (first run may take a few seconds)...",
       noFile: "Please choose a CSV file first.",
       batchDone: "Done, downloaded results.csv",
+      save: "Save result",
+      historyLabel: "Saved history",
+      edit: "Edit",
+      delete: "Delete",
+      saved: "Saved.",
+      emptyHistory: "No saved reviews yet.",
       footnote: "Models: TF-IDF + LR (default), BERT, RoBERTa. 'Neutral' means confidence below threshold.",
     },
     zh: {
@@ -187,6 +217,12 @@ _PAGE = """<!doctype html>
       loading: "正在加载模型（首次运行可能需要几秒）…",
       noFile: "请先选择 CSV 文件。",
       batchDone: "处理完成，已下载 results.csv",
+      save: "保存结果",
+      historyLabel: "历史记录",
+      edit: "编辑",
+      delete: "删除",
+      saved: "已保存。",
+      emptyHistory: "暂无保存的记录。",
       footnote: "模型：TF-IDF + 逻辑回归（默认）、BERT、RoBERTa。「中性」表示置信度低于阈值。",
     }
   };
@@ -308,6 +344,77 @@ _PAGE = """<!doctype html>
       prog.className = 'progress';
     }
   });
+  let editingId = null;
+  const historyEl = document.getElementById('history');
+
+  function escapeHtml(s) {
+    return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  }
+
+  function renderHistory(reviews) {
+    if (!reviews.length) { historyEl.innerHTML = '<p class="empty-hint">' + t().emptyHistory + '</p>'; return; }
+    historyEl.innerHTML = reviews.map(r => {
+      const tags = ['food', 'service', 'price', 'ambience'].map(a => {
+        const lbl = r[a + '_label'] || 'neutral';
+        return '<span class="badge ' + lbl + '">' + t().aspects[a] + ' ' + t().labels[lbl] + '</span>';
+      }).join('');
+      const conf = ['food', 'service', 'price', 'ambience'].map(a => {
+        const c = r[a + '_confidence'] || 0;
+        return t().aspects[a] + ' ' + (c * 100).toFixed(0) + '%';
+      }).join(' / ');
+      return '<div class="history-item">' +
+        '<div class="history-text">' + escapeHtml(r.text) + '</div>' +
+        '<div class="history-tags">' + tags + '</div>' +
+        '<div class="history-meta">' + escapeHtml(r.model) + ' · ' + conf + '</div>' +
+        '<div class="history-actions">' +
+        '<button class="link" data-edit="' + r.id + '">' + t().edit + '</button>' +
+        '<button class="link danger" data-del="' + r.id + '">' + t().delete + '</button>' +
+        '</div></div>';
+    }).join('');
+  }
+
+  async function loadHistory() {
+    const res = await fetch('/api/reviews');
+    const reviews = await res.json();
+    renderHistory(reviews);
+  }
+
+  async function saveReview() {
+    const text = document.getElementById('text').value;
+    const model = document.getElementById('model').value;
+    if (!text.trim()) { status.className = 'status show error'; status.textContent = t().empty; return; }
+    const url = editingId ? ('/api/reviews/' + editingId) : '/api/reviews';
+    const method = editingId ? 'PUT' : 'POST';
+    const res = await fetch(url, { method: method, headers: {'Content-Type': 'application/json'}, body: JSON.stringify({ text: text, model: model }) });
+    if (!res.ok) { const e = await res.json().catch(() => ({})); status.className = 'status show error'; status.textContent = e.detail || 'error'; return; }
+    editingId = null;
+    status.className = 'status show'; status.textContent = t().saved;
+    loadHistory();
+  }
+
+  function editReview(id) {
+    fetch('/api/reviews/' + id).then(r => r.json()).then(rv => {
+      document.getElementById('text').value = rv.text;
+      document.getElementById('model').value = rv.model;
+      editingId = id;
+      window.scrollTo(0, 0);
+    });
+  }
+
+  async function deleteReview(id) {
+    await fetch('/api/reviews/' + id, { method: 'DELETE' });
+    loadHistory();
+  }
+
+  document.getElementById('save').addEventListener('click', saveReview);
+  historyEl.addEventListener('click', function (ev) {
+    const editBtn = ev.target.closest('[data-edit]');
+    const delBtn = ev.target.closest('[data-del]');
+    if (editBtn) editReview(parseInt(editBtn.dataset.edit, 10));
+    if (delBtn) deleteReview(parseInt(delBtn.dataset.del, 10));
+  });
+
+  loadHistory();
   applyLang();
 </script>
 </body></html>"""
@@ -361,11 +468,19 @@ async def predict_csv(file: UploadFile = File(...), model: str = Form("tfidf")) 
         out = df.copy()
         for aspect in ["food", "service", "price", "ambience"]:
             out[f"{aspect}_sentiment"] = ""
+            out[f"{aspect}_confidence"] = ""
+            out[f"{aspect}_positive"] = ""
+            out[f"{aspect}_negative"] = ""
         try:
             for idx, text in enumerate(df[review_col].astype(str)):
                 aspects = ml_model.predict_aspects(text, model)
                 for a in aspects:
-                    out.at[idx, f"{a['aspect']}_sentiment"] = a["label"]
+                    asp = a["aspect"]
+                    out.at[idx, f"{asp}_sentiment"] = a["label"]
+                    if a["confidence"] is not None:
+                        out.at[idx, f"{asp}_confidence"] = a["confidence"]
+                        out.at[idx, f"{asp}_positive"] = a["distribution"].get("positive", "")
+                        out.at[idx, f"{asp}_negative"] = a["distribution"].get("negative", "")
                 yield json.dumps({"type": "progress", "done": idx + 1, "total": total}, ensure_ascii=False) + "\n"
         except FileNotFoundError as exc:
             yield json.dumps({"type": "error", "detail": str(exc)}, ensure_ascii=False) + "\n"
@@ -396,6 +511,51 @@ def demo_api() -> JSONResponse:
 def health() -> JSONResponse:
     loaded = os.path.exists(ml_model.default_model_path())
     return JSONResponse({"status": "ok", "model_loaded": loaded})
+
+
+# --------------------------------------------------------------------------
+# Saved reviews CRUD (SQLite)
+# --------------------------------------------------------------------------
+@app.post("/api/reviews", status_code=201)
+def create_review_api(payload: ReviewInput) -> JSONResponse:
+    try:
+        aspects = ml_model.predict_aspects(payload.text, payload.model)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    review = database.create_review(get_db_path(), payload.text, payload.model, aspects)
+    return JSONResponse(status_code=201, content=review.model_dump())
+
+
+@app.get("/api/reviews")
+def list_reviews_api() -> JSONResponse:
+    return JSONResponse([r.model_dump() for r in database.list_reviews(get_db_path())])
+
+
+@app.get("/api/reviews/{review_id}")
+def get_review_api(review_id: int) -> JSONResponse:
+    review = database.get_review(get_db_path(), review_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="review not found")
+    return JSONResponse(review.model_dump())
+
+
+@app.put("/api/reviews/{review_id}")
+def update_review_api(review_id: int, payload: ReviewInput) -> JSONResponse:
+    try:
+        aspects = ml_model.predict_aspects(payload.text, payload.model)
+    except (FileNotFoundError, ValueError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    review = database.update_review(get_db_path(), review_id, payload.text, payload.model, aspects)
+    if review is None:
+        raise HTTPException(status_code=404, detail="review not found")
+    return JSONResponse(review.model_dump())
+
+
+@app.delete("/api/reviews/{review_id}")
+def delete_review_api(review_id: int) -> JSONResponse:
+    if not database.delete_review(get_db_path(), review_id):
+        raise HTTPException(status_code=404, detail="review not found")
+    return JSONResponse({"deleted": review_id})
 
 
 if __name__ == "__main__":

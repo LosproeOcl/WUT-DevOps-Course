@@ -44,7 +44,12 @@ def demo_csv_path(tmp_path):
 
 
 @pytest.fixture
-def client(trained_model_path, demo_csv_path, monkeypatch):
+def reviews_db_path(tmp_path):
+    return str(tmp_path / "reviews.db")
+
+
+@pytest.fixture
+def client(trained_model_path, demo_csv_path, reviews_db_path, monkeypatch):
     import app.main as main_mod
     import app.model as model_mod
 
@@ -52,6 +57,7 @@ def client(trained_model_path, demo_csv_path, monkeypatch):
     model_mod._load_tfidf.cache_clear()
     monkeypatch.setattr(main_mod, "DEMO_CSV", demo_csv_path)
     main_mod.load_demo_set.cache_clear()
+    monkeypatch.setattr(main_mod, "get_db_path", lambda: reviews_db_path)
 
     from app.main import app
 

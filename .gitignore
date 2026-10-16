@@ -13,6 +13,10 @@ htmlcov/
 .env
 *.env
 
+# ---- Runtime artifacts ----
+*.db
+reviews.db
+
 # ---- Large model artifacts (tracked by DVC, not git) ----
 models/lstm.joblib
 models/bert/
