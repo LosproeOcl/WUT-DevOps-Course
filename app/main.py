@@ -487,9 +487,9 @@ async def predict_csv(file: UploadFile = File(...), model: str = Form("tfidf")) 
         out = df.copy()
         for aspect in ["food", "service", "price", "ambience"]:
             out[f"{aspect}_sentiment"] = ""
-            out[f"{aspect}_confidence"] = ""
-            out[f"{aspect}_positive"] = ""
-            out[f"{aspect}_negative"] = ""
+            out[f"{aspect}_confidence"] = 0.0
+            out[f"{aspect}_positive"] = 0.0
+            out[f"{aspect}_negative"] = 0.0
         try:
             for idx, text in enumerate(df[review_col].astype(str)):
                 aspects = ml_model.predict_aspects(text, model)
@@ -498,8 +498,8 @@ async def predict_csv(file: UploadFile = File(...), model: str = Form("tfidf")) 
                     out.at[idx, f"{asp}_sentiment"] = a["label"]
                     if a["confidence"] is not None:
                         out.at[idx, f"{asp}_confidence"] = a["confidence"]
-                        out.at[idx, f"{asp}_positive"] = a["distribution"].get("positive", "")
-                        out.at[idx, f"{asp}_negative"] = a["distribution"].get("negative", "")
+                        out.at[idx, f"{asp}_positive"] = a["distribution"].get("positive", 0.0)
+                        out.at[idx, f"{asp}_negative"] = a["distribution"].get("negative", 0.0)
                 database.create_review(get_db_path(), text, model, aspects)
                 yield json.dumps({"type": "progress", "done": idx + 1, "total": total}, ensure_ascii=False) + "\n"
         except FileNotFoundError as exc:
