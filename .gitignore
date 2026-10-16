@@ -19,6 +19,7 @@ htmlcov/
 # ---- Data: tracked by DVC, not git ----
 /data/raw/
 /data/processed/
+/dvc-remote/
 
 # ---- IDE / OS ----
 .idea/

@@ -10,24 +10,27 @@
 - **Format**: "segmented" triples — one sentence (target term replaced by `$T$`),
   the target term, and the polarity (`-1`/`0`/`1`) per line.
 
-The raw data is **not committed to git**; it lives in DVC remote storage
-(MS Azure Blob), and git only stores the small `.dvc` pointer files.
+The raw data is **not committed to git**; it lives in DVC remote storage,
+and git only stores the small `.dvc` pointer files.
 
 ## How data is versioned
 
 ```bash
 dvc add data/raw data/processed     # creates .dvc files
 git add data.dvc ...                # commit the pointer files
-dvc push                            # upload actual data to Azure
+dvc push                            # upload actual data to the DVC remote
 ```
 
-The DVC remote is Azure Blob Storage (`azure://dvc`, account `wut2026`), configured
-in `.dvc/config`. The account key / connection string is a secret and lives in
-`.dvc/config.local` (gitignored) — set it before running `dvc push`:
+The DVC remote is a **local directory** (`dvc-remote/`, configured as remote `local`)
+that simulates remote storage. It is gitignored, so git never sees the actual data.
 
 ```bash
-dvc remote modify myazure connection_string "<your Azure connection string>"
+# already configured:
+#   dvc remote add -d local dvc-remote
+#   (this creates/uses ./dvc-remote/ as the storage backend)
 ```
+
+To switch to a real remote later (e.g. Azure), just re-add a remote and `dvc push`:
 
 ## Dataset versions
 
