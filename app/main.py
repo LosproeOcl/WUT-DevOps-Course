@@ -130,3 +130,9 @@ def demo_api() -> JSONResponse:
 def health() -> JSONResponse:
     loaded = os.path.exists(ml_model.default_model_path())
     return JSONResponse({"status": "ok", "model_loaded": loaded})
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="0.0.0.0", port=8000)
