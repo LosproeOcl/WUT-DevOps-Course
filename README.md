@@ -1,37 +1,39 @@
 # Aspect-Based Sentiment Analysis (MLOps + DevOps)
 
-A machine-learning web app that performs **aspect-term sentiment analysis** on
-restaurant reviews: given a review and an aspect term (e.g. `food`, `service`,
-`price`), it classifies the sentiment of that aspect as **negative / neutral /
-positive**.
+A machine-learning web app that performs **aspect-category sentiment analysis** on
+restaurant reviews: given a review, it classifies the sentiment of four aspects —
+**Taste/Food (口味), Service (服务), Price (价格), Ambience (环境)** — as
+**negative / neutral / positive**, with a bilingual (中/EN) UI.
 
 Built end-to-end with the DevOps + MLOps practices required by the course:
 
 - **DevOps** — Git branching (`main` / `staging` / `dev`), Docker, GitHub Actions CI/CD.
-- **MLOps** — DVC for data versioning, MLflow for experiment tracking.
+- **MLOps** — DVC for data versioning, MLflow for experiment tracking + model registry
+  (logged to DagsHub).
 
 ## Tech stack
 
 - Python 3.12, FastAPI (app), scikit-learn (model)
-- DVC (data versioning) + MLflow (experiment tracking)
+- DVC (data versioning), MLflow + DagsHub (experiment tracking + model registry)
 - Docker, GitHub Actions
 
 ## Repository layout
 
 ```
-app/                    # FastAPI application (API + interactive HTML page)
-  main.py               # routes, HTML page, /predict, /api/demo
+app/                    # FastAPI application (API + bilingual HTML page)
+  main.py               # routes, 4-aspect result page, /predict, /api/demo
   model.py              # model loading + inference (unit-testable)
 ml/                     # machine-learning code
-  data_pipeline.py      # parse raw data -> v1/v2 processed CSVs
-  train.py              # training script with MLflow logging
+  aspects.py            # the four aspects + category mapping + bilingual names
+  data_pipeline.py      # parse MAMS-ACSA XML -> v1/v2 processed CSVs
+  train.py              # training script (4 aspect classifiers, MLflow logging)
   configs/              # hyperparameter configs
-  registry/             # which model is production
+  registry/             # which models are production
   README_data.md        # data versioning documentation
   README_experiments.md # MLflow experiment summary
   PROVENANCE.md         # code<->data<->model traceability
 data/                   # raw/ + processed/ (tracked by DVC), demo.csv (committed)
-models/                 # trained model artifact
+models/                 # trained model artifact (dict of 4 pipelines)
 scripts/download_data.py
 tests/                  # unit + api tests
 Dockerfile
@@ -44,22 +46,36 @@ Dockerfile
 # 1. install deps (training + serving)
 python -m pip install -r requirements-ml.txt
 
-# 2. download the SemEval-2014 Restaurant dataset
+# 2. download the MAMS-ACSA restaurant dataset
 python scripts/download_data.py
 
 # 3. build v1/v2 datasets
-python ml/data_pipeline.py
+python -m ml.data_pipeline
 
-# 4. train (baseline and tuned), logs to MLflow
-python ml/train.py --data-version v2 --mode baseline
-python ml/train.py --data-version v2 --mode tuned
+# 4. train (baseline and tuned), logs + registers models to MLflow
+python -m ml.train --data-version v2 --mode baseline
+python -m ml.train --data-version v2 --mode tuned
 
 # 5. run the app
 python -m uvicorn app.main:app --reload
 # open http://127.0.0.1:8000
 ```
 
-View experiment history: `mlflow ui` (then open http://127.0.0.1:5000).
+## Tracking experiments to DagsHub
+
+The training script points MLflow at DagsHub (see `15-MLFlow.pdf`) when these
+environment variables are set:
+
+```bash
+export DAGSHUB_REPO_OWNER=<owner>
+export DAGSHUB_REPO_NAME=<repo>
+export MLFLOW_TRACKING_USERNAME=<username>
+export MLFLOW_TRACKING_PASSWORD=<dagshub token>
+```
+
+Without them, MLflow uses the local `mlruns/` backend. When tracking to DagsHub,
+each aspect model is logged and registered in the MLflow Model Registry
+(`absa_restaurant_food` / `service` / `price` / `ambience`).
 
 ## Code flow: commit -> build -> test -> staging -> prod
 
@@ -87,5 +103,3 @@ See `DEPLOYMENT.md` for the full deployment story.
 docker build -t absa-app .
 docker run -p 8000:8000 absa-app
 ```
-
-See `.dockerignore` for what is excluded from the image.

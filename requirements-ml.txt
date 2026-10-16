@@ -1,3 +1,4 @@
 -r requirements.txt
-mlflow
+mlflow<3
 matplotlib
+dagshub

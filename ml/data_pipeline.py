@@ -1,7 +1,12 @@
-"""Data pipeline for the SemEval-2014 Restaurant aspect sentiment dataset.
+"""Data pipeline for the MAMS-ACSA restaurant aspect-category dataset.
 
-Turns the raw "segmented" triple format into clean CSV datasets, producing two
-documented versions (v1 = minimal parse, v2 = cleaned/normalized/deduplicated).
+Parses the raw XML (per-sentence `<aspectCategory category polarity>` pairs),
+maps fine-grained categories to the four coarse aspects, and writes v1/v2 CSVs.
+
+Output CSV columns: text, aspect, polarity, label, split
+    aspect    : one of food / service / price / ambience
+    polarity  : 1 (positive) / 0 (neutral) / -1 (negative)
+    label     : positive / neutral / negative
 """
 from __future__ import annotations
 
@@ -9,64 +14,50 @@ import argparse
 import os
 import re
 import sys
+import xml.etree.ElementTree as ET
 
 import pandas as pd
 
-POLARITY_TO_LABEL = {-1: "negative", 0: "neutral", 1: "positive"}
+from .aspects import ASPECTS, map_category
+
+POLARITY_TO_LABEL = {"positive": 1, "neutral": 0, "negative": -1}
 LABEL_TO_POLARITY = {v: k for k, v in POLARITY_TO_LABEL.items()}
 
-COLUMNS = ["text", "term", "polarity", "label", "split"]
+COLUMNS = ["text", "aspect", "polarity", "label", "split"]
 
-# Artifacts left by the `.seg` tokenization that we clean up in v2.
-_LRB = re.compile(r"\s*-LRB-\s*")
-_RRB = re.compile(r"\s*-RRB-\s*")
 _WS = re.compile(r"\s+")
 
 
-def parse_seg_file(path: str) -> list[dict]:
-    """Parse a `.seg` file (3 lines per instance) into records."""
-    with open(path, encoding="utf-8", errors="replace") as fh:
-        lines = [ln.strip() for ln in fh.read().splitlines()]
-
+def parse_xml_file(path: str) -> list[dict]:
+    """Parse a MAMS ACSA XML file into (text, aspect, polarity) records."""
+    tree = ET.parse(path)
     records: list[dict] = []
-    for i in range(0, len(lines) - 2, 3):
-        sentence, term, polarity = lines[i], lines[i + 1], lines[i + 2]
-        if not sentence or not term or polarity not in ("-1", "0", "1"):
-            continue
-        records.append(
-            {
-                "text": sentence,  # still contains the `$T$` placeholder
-                "term": term,
-                "polarity": int(polarity),
-                "label": POLARITY_TO_LABEL[int(polarity)],
-            }
-        )
+    for sentence in tree.getroot().findall("sentence"):
+        text_el = sentence.find("text")
+        text = text_el.text if text_el is not None and text_el.text else ""
+        text = _WS.sub(" ", text).strip()
+        for ac in sentence.findall(".//aspectCategory"):
+            category = ac.get("category", "").lower()
+            polarity = ac.get("polarity", "").lower()
+            aspect = map_category(category)
+            if aspect is None or polarity not in POLARITY_TO_LABEL:
+                continue
+            records.append(
+                {
+                    "text": text,
+                    "aspect": aspect,
+                    "polarity": POLARITY_TO_LABEL[polarity],
+                    "label": polarity,
+                }
+            )
     return records
 
 
-def inject_term(text: str, term: str) -> str:
-    """Replace the `$T$` placeholder with the target term."""
-    return text.replace("$T$", term)
-
-
-def clean_text(text: str) -> str:
-    """Normalize a sentence: restore parentheses, drop stray tokens."""
-    text = _LRB.sub(" ( ", text)
-    text = _RRB.sub(" ) ", text)
-    text = text.replace("`", "").replace(" '", "'")
-    text = text.lower()
-    return _WS.sub(" ", text).strip()
-
-
 def build_dataframe(raw_dir: str) -> pd.DataFrame:
-    """Load train + test `.seg` files into a single DataFrame."""
     frames = []
-    for split, filename in [
-        ("train", "Restaurants_Train.xml.seg"),
-        ("test", "Restaurants_Test_Gold.xml.seg"),
-    ]:
+    for split, filename in [("train", "train.xml"), ("val", "val.xml"), ("test", "test.xml")]:
         path = os.path.join(raw_dir, filename)
-        records = parse_seg_file(path)
+        records = parse_xml_file(path)
         df = pd.DataFrame(records, columns=COLUMNS[:4])
         df["split"] = split
         frames.append(df)
@@ -74,18 +65,13 @@ def build_dataframe(raw_dir: str) -> pd.DataFrame:
 
 
 def build_v1(df: pd.DataFrame) -> pd.DataFrame:
-    """v1: minimal parse — inject term, keep everything else as-is."""
-    out = df.copy()
-    out["text"] = [inject_term(t, a) for t, a in zip(out["text"], out["term"])]
-    return out[COLUMNS]
+    return df[COLUMNS].copy()
 
 
 def build_v2(df: pd.DataFrame) -> pd.DataFrame:
-    """v2: cleaned — normalize text, deduplicate (text, term, label) pairs."""
     out = df.copy()
-    out["text"] = [clean_text(inject_term(t, a)) for t, a in zip(out["text"], out["term"])]
-    out["term"] = out["term"].str.lower().str.strip()
-    out = out.drop_duplicates(subset=["text", "term", "label"]).reset_index(drop=True)
+    out["text"] = out["text"].str.lower().str.strip()
+    out = out.drop_duplicates(subset=["text", "aspect", "label"]).reset_index(drop=True)
     return out[COLUMNS]
 
 
@@ -95,7 +81,7 @@ def save(df: pd.DataFrame, path: str) -> None:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Build v1/v2 processed datasets")
+    parser = argparse.ArgumentParser(description="Build v1/v2 aspect-category datasets")
     parser.add_argument("--raw-dir", default="data/raw")
     parser.add_argument("--out-dir", default="data/processed")
     args = parser.parse_args()
@@ -108,14 +94,14 @@ def main() -> int:
     v1 = build_v1(df)
     v2 = build_v2(df)
 
-    for split in ("train", "test"):
+    for split in ("train", "val", "test"):
         save(v1[v1["split"] == split], os.path.join(out_dir, f"{split}_v1.csv"))
         save(v2[v2["split"] == split], os.path.join(out_dir, f"{split}_v2.csv"))
 
     print(f"[pipeline] raw rows: {len(df)}")
     print(f"[pipeline] v1 rows: {len(v1)}  v2 rows: {len(v2)}")
-    print(f"[pipeline] v2 dedup removed: {len(v1) - len(v2)} rows")
-    print("[pipeline] wrote train/test v1+v2 CSVs to", out_dir)
+    print("[pipeline] aspects:", {a: int((v2["aspect"] == a).sum()) for a in ASPECTS})
+    print("[pipeline] wrote train/val/test v1+v2 CSVs to", out_dir)
     return 0
 
 

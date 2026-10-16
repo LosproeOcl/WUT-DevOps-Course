@@ -2,16 +2,17 @@
 
 ## Source
 
-- **Dataset**: SemEval-2014 Task 4, Restaurant aspect-based sentiment analysis.
-- **Origin**: the SemEval-2014 shared task (original data requires registration at
-  `alt.qcri.org`). We use the widely-cited mirror in
-  `songyouwei/ABSA-PyTorch` (`datasets/semeval14`).
+- **Dataset**: MAMS-ACSA (Aspect Category Sentiment Analysis), from the MAMS
+  (Multi-Aspect Multi-Sentiment) project — `siat-nlp/MAMS-for-ABSA`.
+- **Origin**: this raw snapshot contains the *English* restaurant reviews
+  (reformatted from SemEval-2014) with per-sentence `<aspectCategory>` annotations.
+  The full Chinese MAMS data (Dianping reviews) is a separate, much larger release.
 - **License**: research use (shared-task benchmark data).
-- **Format**: "segmented" triples — one sentence (target term replaced by `$T$`),
-  the target term, and the polarity (`-1`/`0`/`1`) per line.
+- **Format**: XML — each `<sentence>` has a `<text>` and a set of
+  `<aspectCategory category="..." polarity="..."/>` elements.
 
-The raw data is **not committed to git**; it lives in DVC remote storage,
-and git only stores the small `.dvc` pointer files.
+The raw data is **not committed to git**; it lives in DVC remote storage, and git
+only stores the small `.dvc` pointer files.
 
 ## How data is versioned
 
@@ -21,36 +22,39 @@ git add data.dvc ...                # commit the pointer files
 dvc push                            # upload actual data to the DVC remote
 ```
 
-The DVC remote is a **local directory** (`dvc-remote/`, configured as remote `local`)
-that simulates remote storage. It is gitignored, so git never sees the actual data.
+The DVC remote is a **local directory** (`dvc-remote/`, remote `local`) that
+simulates remote storage. It is gitignored, so git never sees the actual data.
 
-```bash
-# already configured:
-#   dvc remote add -d local dvc-remote
-#   (this creates/uses ./dvc-remote/ as the storage backend)
-```
+## Aspect mapping
 
-To switch to a real remote later (e.g. Azure), just re-add a remote and `dvc push`:
+Fine-grained MAMS categories are merged into four coarse aspects:
+
+| Aspect | Code | MAMS categories |
+|--------|------|-----------------|
+| 口味 (Taste/Food) | `food` | food, menu |
+| 服务 (Service) | `service` | service, staff |
+| 价格 (Price) | `price` | price |
+| 环境 (Ambience) | `ambience` | ambience, place |
+
+`miscellaneous` is dropped.
 
 ## Dataset versions
 
 | Version | Path | Description |
 |---------|------|-------------|
-| v1 | `data/processed/{train,test}_v1.csv` | Minimal parse: inject the target term, keep text as-is. |
-| v2 | `data/processed/{train,test}_v2.csv` | Cleaned: lowercased, normalized parentheses (`-LRB-`/`-RRB-`), collapsed whitespace, deduplicated `(text, term, label)` rows. |
+| v1 | `data/processed/{train,val,test}_v1.csv` | Minimal parse: extract (text, aspect, polarity) rows. |
+| v2 | `data/processed/{train,val,test}_v2.csv` | Cleaned: lowercased, collapsed whitespace, deduplicated `(text, aspect, label)` rows. |
 
 ### What changed v1 -> v2
 
-- Lowercased all text and terms (reduces vocabulary sparsity).
-- Replaced `-LRB-` / `-RRB-` tokenization artifacts with parentheses.
-- Collapsed whitespace and removed stray backticks.
-- Removed duplicate `(text, term, label)` records.
+- Lowercased all text.
+- Collapsed whitespace.
+- Removed duplicate `(text, aspect, label)` records.
 
-### Raw counts
+### Counts
 
-- Train: 3608 instances (positive 2164 / negative 807 / neutral 637).
-- Test: 1120 instances (positive 728 / negative 196 / neutral 196).
-- v2 deduplication removed a small number of duplicate rows (see pipeline output).
+- Raw aspect rows: 7660 (v2: 7511 after dedup).
+- Per aspect (v2): food 3418 / service 2452 / price 405 / ambience 1236.
 
 ## Linking code -> data
 

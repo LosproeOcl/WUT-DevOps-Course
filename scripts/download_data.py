@@ -1,12 +1,12 @@
-"""Download the SemEval-2014 Restaurant aspect-based sentiment dataset.
+"""Download the MAMS-ACSA restaurant aspect-category sentiment dataset.
 
-Source: the widely-used mirror in the `songyouwei/ABSA-PyTorch` repository
-(original data from the SemEval-2014 Task 4 shared task).
+Source: https://github.com/siat-nlp/MAMS-for-ABSA (MAMS: Multi-Aspect
+Multi-Sentiment). The `MAMS-ACSA/raw` files are XML with, per sentence, a set
+of `<aspectCategory category="..." polarity="..."/>` annotations.
 
-The raw files use a compact "segmented" triple format:
-    <sentence with the target term replaced by `$T$`>
-    <target term>
-    <polarity: -1 negative / 0 neutral / 1 positive>
+Note: this raw snapshot contains the *English* restaurant reviews (reformatted
+from SemEval-2014); the full Chinese MAMS data is a separate, much larger
+download from the MAMS authors.
 """
 from __future__ import annotations
 
@@ -14,16 +14,12 @@ import os
 import sys
 import urllib.request
 
-BASE_URL = "https://raw.githubusercontent.com/songyouwei/ABSA-PyTorch/master/datasets/semeval14"
+BASE_URL = "https://raw.githubusercontent.com/siat-nlp/MAMS-for-ABSA/master/data/MAMS-ACSA/raw"
 
-FILES = {
-    "Restaurants_Train.xml.seg": "train",
-    "Restaurants_Test_Gold.xml.seg": "test",
-}
+FILES = {"train.xml": "train", "val.xml": "val", "test.xml": "test"}
 
 
 def download(raw_dir: str) -> dict[str, str]:
-    """Download the raw dataset files into `raw_dir` and return their paths."""
     os.makedirs(raw_dir, exist_ok=True)
     downloaded: dict[str, str] = {}
     for filename, split in FILES.items():

@@ -1,72 +1,76 @@
 import pandas as pd
 
-from ml.data_pipeline import (
-    POLARITY_TO_LABEL,
-    build_v1,
-    build_v2,
-    clean_text,
-    inject_term,
-    parse_seg_file,
-)
+from ml.aspects import ASPECTS, map_category
+from ml.data_pipeline import build_v2, parse_xml_file
+
+SAMPLE_XML = """<?xml version="1.0" encoding="utf-8"?>
+<sentences>
+  <sentence>
+    <text>The food was great but the service was slow.</text>
+    <aspectCategories>
+      <aspectCategory category="food" polarity="positive"/>
+      <aspectCategory category="service" polarity="negative"/>
+    </aspectCategories>
+  </sentence>
+  <sentence>
+    <text>Reasonable price and nice ambience.</text>
+    <aspectCategories>
+      <aspectCategory category="price" polarity="neutral"/>
+      <aspectCategory category="miscellaneous" polarity="neutral"/>
+    </aspectCategories>
+  </sentence>
+</sentences>
+"""
 
 
-def test_polarity_mapping():
-    assert POLARITY_TO_LABEL == {-1: "negative", 0: "neutral", 1: "positive"}
+def test_map_category_maps_and_drops():
+    assert map_category("food") == "food"
+    assert map_category("menu") == "food"
+    assert map_category("staff") == "service"
+    assert map_category("ambience") == "ambience"
+    assert map_category("place") == "ambience"
+    assert map_category("miscellaneous") is None
+    assert map_category("UNKNOWN") is None
 
 
-def test_inject_term_replaces_placeholder():
-    assert inject_term("the $T$ was great", "food") == "the food was great"
+def test_parse_xml_file_extracts_aspects(tmp_path):
+    xml = tmp_path / "sample.xml"
+    xml.write_text(SAMPLE_XML, encoding="utf-8")
+    records = parse_xml_file(str(xml))
+    # 3 aspectCategory rows survive (miscellaneous is dropped)
+    assert len(records) == 3
+    food = next(r for r in records if r["aspect"] == "food")
+    assert food["label"] == "positive"
+    assert food["polarity"] == 1
+    assert any(r["aspect"] == "service" and r["label"] == "negative" for r in records)
+    assert any(r["aspect"] == "price" and r["label"] == "neutral" for r in records)
+    assert not any(r["aspect"] == "miscellaneous" for r in records)
 
 
-def test_inject_term_replaces_all_occurrences():
-    assert inject_term("$T$ and $T$", "x") == "x and x"
-
-
-def test_clean_text_lowercases_and_fixes_parens():
-    assert clean_text("Not only was the -LRB- food -RRB- great") == "not only was the ( food ) great"
-
-
-def test_clean_text_collapses_whitespace():
-    assert clean_text("  a   b  ") == "a b"
-
-
-def test_parse_seg_file_builds_records(tmp_path):
-    seg = tmp_path / "sample.seg"
-    seg.write_text(
-        "the $T$ was good\nfood\n1\n"
-        "the $T$ was awful\nservice\n-1\n"
-        "the $T$ was ok\nprice\n0\n",
+def test_parse_xml_file_handles_empty_text(tmp_path):
+    xml = tmp_path / "empty.xml"
+    xml.write_text(
+        '<?xml version="1.0"?><sentences><sentence><text> </text>'
+        '<aspectCategories><aspectCategory category="food" polarity="positive"/>'
+        "</aspectCategories></sentence></sentences>",
         encoding="utf-8",
     )
-    records = parse_seg_file(str(seg))
-    assert len(records) == 3
-    assert records[0] == {"text": "the $T$ was good", "term": "food", "polarity": 1, "label": "positive"}
-    assert records[1]["label"] == "negative"
-    assert records[2]["label"] == "neutral"
+    records = parse_xml_file(str(xml))
+    assert len(records) == 1
+    assert records[0]["text"] == ""
 
 
-def test_parse_seg_file_skips_malformed_lines(tmp_path):
-    seg = tmp_path / "bad.seg"
-    seg.write_text("no term here\n\nnot-a-polarity\n", encoding="utf-8")
-    assert parse_seg_file(str(seg)) == []
-
-
-def test_build_v1_injects_term():
-    df = pd.DataFrame(
-        [{"text": "the $T$", "term": "food", "polarity": 1, "label": "positive", "split": "train"}]
-    )
-    v1 = build_v1(df)
-    assert v1.iloc[0]["text"] == "the food"
-
-
-def test_build_v2_cleans_and_deduplicates():
+def test_build_v2_deduplicates():
     df = pd.DataFrame(
         [
-            {"text": "the $T$ was good", "term": "Food", "polarity": 1, "label": "positive", "split": "train"},
-            {"text": "the $T$ was good", "term": "food", "polarity": 1, "label": "positive", "split": "train"},
+            {"text": "great food", "aspect": "food", "polarity": 1, "label": "positive", "split": "train"},
+            {"text": "great food", "aspect": "food", "polarity": 1, "label": "positive", "split": "train"},
         ]
     )
     v2 = build_v2(df)
     assert len(v2) == 1
-    assert v2.iloc[0]["text"] == "the food was good"
-    assert v2.iloc[0]["term"] == "food"
+    assert v2.iloc[0]["text"] == "great food"
+
+
+def test_aspects_are_four():
+    assert ASPECTS == ["food", "service", "price", "ambience"]
