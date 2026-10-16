@@ -1,0 +1,36 @@
+orchestrator
+
+JenKins
+Ansible
+
+GitHub Actions - Configurations - workflows
+
+hub.docker.com
+
+从仓库拉取镜像创建容器
+
+
+
+
+MLFlow
+Code（py,js,c,cpp,r）
+Trained Model（model weight, PKL）
+Model Metrics（accuracy,performacne）
+
+API/Backend
+Model
+
+version control(trace the changes):
+code: git
+data: DVC + git
+Model: MLFlow + git
+
+model<-data+parameters
+find the minimal cluster where points belonging to the same neighborhood
+
+
+
+
+
+
+
