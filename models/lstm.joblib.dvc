@@ -1,0 +1,5 @@
+outs:
+- md5: 5f5d3ea53aa0740e4d44c00bc2eabbcb
+  size: 25734793
+  hash: md5
+  path: lstm.joblib

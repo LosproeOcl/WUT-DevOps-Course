@@ -18,6 +18,7 @@ mlruns/
 .dvc/
 *.dvc
 *.md
+models/lstm.joblib
 .gitignore
 .dockerignore
 .dvcignore

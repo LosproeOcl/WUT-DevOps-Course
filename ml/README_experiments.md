@@ -46,12 +46,26 @@ macro-F1 and the reliability of the reported confidence.
 
 ## Registered models (MLflow Model Registry)
 
-- `absa_restaurant_food`
-- `absa_restaurant_service`
-- `absa_restaurant_price`
-- `absa_restaurant_ambience`
+- `absa_restaurant` — the **unified** TF-IDF + LR model (all four aspects in one
+  pyfunc model).
+- `absa_restaurant_lstm` — the BiLSTM model (see below).
 
-Each has two versions: v1 = baseline, v2 = tuned (production).
+## BiLSTM experiment
+
+A bidirectional LSTM (embedding 128, hidden 128) was trained as a deep-learning
+replacement. On this small dataset it **underperforms** the tuned TF-IDF + LR:
+
+| Aspect | TF-IDF+LR (tuned) | BiLSTM |
+|--------|-------------------|--------|
+| food | 0.6609 | 0.4706 |
+| service | 0.7039 | 0.6199 |
+| price | 0.8518 | 0.8036 |
+| ambience | 0.7164 | 0.5830 |
+
+This is expected: deep models need far more training data. The BiLSTM is kept as
+a registered alternative (`absa_restaurant_lstm`); the TF-IDF + LR remains the
+production model until a larger dataset (e.g. the full Chinese MAMS corpus) is
+available.
 
 ## Production-worthy run
 

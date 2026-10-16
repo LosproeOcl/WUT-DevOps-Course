@@ -13,6 +13,9 @@ htmlcov/
 .env
 *.env
 
+# ---- Large model artifacts (tracked by DVC, not git) ----
+models/lstm.joblib
+
 # ---- MLflow local run history ----
 /mlruns/
 
