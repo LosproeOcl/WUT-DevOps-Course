@@ -281,7 +281,8 @@ _PAGE = """<!doctype html>
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
         let nl;
-        while ((nl = buffer.indexOf('\n')) >= 0) {
+        const NL = String.fromCharCode(10);
+        while ((nl = buffer.indexOf(NL)) >= 0) {
           const line = buffer.slice(0, nl).trim();
           buffer = buffer.slice(nl + 1);
           if (!line) continue;
@@ -292,7 +293,7 @@ _PAGE = """<!doctype html>
           } else if (msg.type === 'error') {
             bs.className = 'status show error'; bs.textContent = msg.detail;
           } else if (msg.type === 'result') {
-            const blob = new Blob(['\uFEFF' + msg.csv], { type: 'text/csv;charset=utf-8' });
+            const blob = new Blob([String.fromCharCode(65279) + msg.csv], { type: 'text/csv;charset=utf-8' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url; a.download = msg.filename; a.click();
