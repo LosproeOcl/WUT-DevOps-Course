@@ -38,48 +38,23 @@ Dockerfile
 
 ## 开发历程
 
-按实际发生的时间顺序写，包含每个决策的理由。
+这是塑造了整个项目的一系列决策和弯路，按发生顺序记录。
 
-### 1. 选题
+课程作业要求的是一个训练或微调过模型的 ML 应用，带数据版本管理、实验跟踪、Git、Docker 和 CI/CD，还要有交互演示、保留一部分测试集。餐厅评论的方面级情感分析正好对上这份要求：演示本身很直观——输入一条评论，得到各维度的情感；保留测试集的需求也顺理成章地退化成一个小型的、不参与评估的 `demo.csv`。选它是因为合适，而不是因为任务有多新。
 
-课程作业（见 `PracticeIntro/project-instructions.pdf`）要求做一个训练/微调模型的 ML 应用，带数据版本管理、实验跟踪、Git、Docker、CI/CD，还要有交互演示、保留一部分测试集。餐厅评论的方面级情感分析很合适：演示就是"输入评论、得到各维度情感"，保留测试集的需求也天然对应一个不参与评估的 `demo.csv`。
+正式写代码之前，得先修机器。机器上同时装着五个 Python，共用一个 user site-packages，还残留着一次中断的 `pip` 升级留下的 `~umpy`、`~ip`、`~crypt` 文件夹，`import sklearn` 直接报 `numpy.core.multiarray failed to import`。把环境统一到 `C:\Python312`、删掉残留、重装 numpy，这件事花了比预期更多的时间，也决定了后面所有工作都放在项目独立的 `.venv` 里，不再碰全局环境。
 
-### 2. 本机环境
+数据集换过两次。最初用英文 SemEval-2014 餐厅评论，两个需求让它维持不下去：一是应用要输出四个固定维度，标注就得从"方面词"改成"方面类别"；二是界面要双语、要支持中文。MAMS 是中文 ABSA 的标准语料，但挂在 Google Drive 上，下载不顺。美团点评的 ASAP 更合适——中文、在 GitHub 上、约 46,850 条、18 个方面类别正好能归并成四个维度，比 SemEval 大一个量级。中文按字符切分，省掉了词典依赖。
 
-代码还没写，机器先出问题了。机器上有五个 Python（Microsoft Store 3.11、`C:\Python312`、Anaconda、3.8、VS 自带的 3.9），共用一个 user site-packages，还残留了中断的 `pip` 升级留下的 `~umpy`/`~ip`/`~crypt` 文件夹，`import sklearn` 报 `numpy.core.multiarray failed to import`。我把环境统一到 `C:\Python312`，删掉 `~` 开头的残留，重装 numpy。这步比预期花的时间长，也决定了后面全程用项目独立 `.venv`。
+模型是改动最多的部分。先上 TF-IDF + LR 做基线，0.45 左右的置信度不是校准问题，而是"中性"这个类太模糊、成了大杂烩；去掉它改成二分类之后，macro-F1 和置信度才真正上去。再想用深度模型超过这个基线，就需要 GPU，而笔记本没有，于是租了 AutoDL。CPU 上的 BiLSTM 因为数据不够没跑出名堂，在 AutoDL 上微调 BERT 和 RoBERTa 才见效。它们在多维度混合的句子上确实更好，但不是全面领先，而且 CPU 推理慢，所以三个模型都留了下来，运行时切换，TF-IDF 当默认。
 
-### 3. 数据：从英文换到中文
+DVC 的远端搬过一次。一开始没有 Azure 账号，先用本地目录顶着。拿到 Azure 学生账号之后，建了存储账户和容器，把远端切到 Azure Blob。第一次 push 大文件时报 socket 超时，是国内访问 Azure 的间歇性问题，重试就过了。
 
-一开始用英文 SemEval-2014 餐厅评论。两个需求逼着我改：
+实验跟踪按课程的 MLflow 指南走，先本地、再 DagsHub。这一步踩到一个版本冲突：MLflow 3.x 调的 `CreateLoggedModel` 端点在 DagsHub 的 2.x 服务器上不存在，最后把客户端锁在 `mlflow<3`。
 
-- 应用要输出**四个固定维度**（口味/服务/价格/环境），所以从"方面词级"改成了"方面类别级"标注。
-- 界面要双语、要支持中文输入，所以需要中文数据集。
+应用本身从单个 `/predict` 端点一点点长起来：四维度输出、双语界面、模型选择、CSV 批量导入导出、保存记录增删改查，最后拆成分析和历史两个页面。最烦人的一个 bug 是 Python 三引号字符串里的 `'\n'` 在生成的 JS 里变成了真实换行，整页按钮全部失灵，最后用 `String.fromCharCode` 绕开。
 
-MAMS（中科院深圳先进院）是中文 ABSA 的标准数据集，但语料在 Google Drive 上，不好下载。**ASAP**（美团点评）更合适：中文、挂在 GitHub 上、约 46,850 条、18 个方面类别正好能归并成四个维度，比 SemEval 大十倍左右。中文按字符分词——快、不依赖词典、词表小。
-
-### 4. 模型：TF-IDF → LSTM → BERT/RoBERTa
-
-先上 TF-IDF + LR。它的置信度只有 ~0.45，后来发现这是"诚实"的：因为"中性"是个大杂烩类。去掉中性、改成二分类（正面/负面）后，macro-F1 和置信度都实实在在涨了。试过校准、硬拉置信度，只会让数字好看却拉低 F1，就没用。
-
-接着想用深度模型超过它。我的笔记本没有 NVIDIA 显卡（只有 Intel 核显），CPU 上微调 transformer 要几个小时，所以租了 **AutoDL**（RTX 3080 Ti，按小时计费）。先在本机试了 BiLSTM——数据不够，效果不行。在 AutoDL 上微调了 BERT（`bert-base-chinese`）和 RoBERTa（`chinese-roberta-wwm-ext`）。
-
-结果：BERT/RoBERTa 在多维度混合的句子上超过 TF-IDF，但不是全面领先，而且 CPU 上很慢。所以**三个模型都保留**，用下拉框切换——TF-IDF 作为默认（快），BERT/RoBERTa 作为精度优先的选项。
-
-### 5. DVC：本地目录 → Azure Blob
-
-一开始没有 Azure 账号，先用本地目录模拟远端。课程指南（`7. DVC-with-Azure-Blob-Storage.pdf`）默认你有 Azure。后来拿到 Azure 学生账号（EFREI 邮箱，$100 额度），建了存储账户和 blob 容器，把远端切到 Azure Blob。第一次 `dvc push` 大文件报 `Timeout on reading data from socket`——是国内访问 Azure 的间歇性网络问题，重试几次就好了。
-
-### 6. MLflow + DagsHub
-
-按课程的 MLflow 指南（`15-MLFlow.pdf`），先用本地 tracking，再把 MLflow 指到 DagsHub。这暴露了一个版本冲突：MLflow 3.x 用了 `CreateLoggedModel` 端点，DagsHub 的 2.x 服务器不支持（`INVALID_PARAMETER_VALUE`），于是锁了 `mlflow<3`。现在 run 和注册的模型都落在 DagsHub 上。
-
-### 7. 应用功能迭代
-
-它从单个 `/predict` 端点一路长成：4 维度输出、双语界面、模型选择、CSV 批量导入导出、保存记录增删改查、最后拆成两个页面（分析 + 历史）。期间踩过一个坑：Python 三引号 HTML 字符串里的 `'\n'` 变成了真实换行，把生成的 JS 弄断了、所有按钮失灵——改用 `String.fromCharCode(10)` 解决。
-
-### 8. CI/CD
-
-按课程指南（`3-1. GITHUB_ACTIONS_GUIDE.pdf`）配 GitHub Actions：向受保护分支发 PR 会跑 ruff + pytest + Docker 构建；推 `staging`/`main` 会发布镜像。Docker 镜像是 `python:3.12-slim`，只装运行时依赖——torch/transformers 懒加载，镜像不用带 ~2 GB 的深度学习栈。
+CI/CD 用 GitHub Actions，按课程指南配：发 PR 跑 ruff、pytest 和 Docker 构建，推 staging/main 发布镜像。镜像是 `python:3.12-slim`，只带运行时依赖——torch 和 transformers 懒加载，避免把两 GB 的深度学习栈塞进镜像。
 
 ## 环境配置
 

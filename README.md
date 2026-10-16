@@ -36,50 +36,25 @@ tests/               pytest unit + API tests
 Dockerfile
 ```
 
-## Project journey
+## Development notes
 
-Written in the order things actually happened, decisions included.
+These are the decisions and detours that shaped the project, in the order they happened.
 
-### 1. Picking a topic
+The assignment asked for a trained or fine-tuned model with dataset versioning, experiment tracking, Git, Docker, and CI/CD, plus an interactive demo that reserves part of the test set. Aspect-based sentiment analysis on restaurant reviews fits that brief: the demo is "type a review, get per-aspect sentiment", and the reserved-set requirement reduces to a small `demo.csv` held out of evaluation. That fit, not novelty, is why the topic was chosen.
 
-The assignment (see `PracticeIntro/project-instructions.pdf`) asked for an ML app that trains or fine-tunes a model, with dataset versioning, experiment tracking, Git, Docker, and CI/CD, plus an interactive demo that reserves part of the test set. Aspect-based sentiment analysis on restaurant reviews fits well: the demo is "type a review, get per-aspect sentiment", and the reserved-set requirement is naturally a small `demo.csv` held out of evaluation.
+The machine had to be fixed before any code ran. Five Python installations shared a single user site-packages, and an interrupted `pip` upgrade left `~umpy`, `~ip`, and `~crypt` folders behind, so `import sklearn` failed with `numpy.core.multiarray failed to import`. Consolidating on `C:\Python312` and deleting the leftovers took longer than expected, and it is the reason everything since has lived in a project-local `.venv` rather than the global environment.
 
-### 2. Local environment
+The dataset was replaced twice. Work began with English SemEval-2014 restaurant reviews, but two requirements made that untenable: the app had to emit four fixed aspects, which meant moving from aspect-term to aspect-category labels, and the UI had to be bilingual with Chinese support. MAMS is the standard Chinese ABSA corpus, but it sits on Google Drive and is awkward to fetch. ASAP from Meituan-Dianping was the better choice — Chinese, on GitHub, roughly 46,850 reviews, 18 aspect categories that collapse neatly into the four, and an order of magnitude larger than SemEval. Chinese text is tokenized at the character level, which removes any dictionary dependency.
 
-Before any code, the machine itself was broken. It had five Python installs (Microsoft Store 3.11, `C:\Python312`, Anaconda, 3.8, a VS-bundled 3.9) sharing one user site-packages, plus `~umpy`/`~ip`/`~crypt` folders left by an interrupted `pip` upgrade. `import sklearn` died with `numpy.core.multiarray failed to import`. I consolidated everything onto `C:\Python312`, deleted the `~`-prefixed leftovers, and reinstalled numpy. That one fix took longer than expected and shaped the rest of the project: from then on I used a project-local `.venv`.
+The model went through the most revisions. TF-IDF + LR was the first baseline, and its ~0.45 confidence was not a calibration problem but a symptom of the "neutral" class acting as a catch-all; dropping it in favor of binary positive/negative lifted both macro-F1 and confidence without any hand-tuning. A deep model still needed a GPU, which the laptop lacks, so an AutoDL box was rented for that. BiLSTM on CPU went nowhere — there was not enough data — but on AutoDL, fine-tuning BERT and RoBERTa paid off. They beat TF-IDF on ambiguous multi-aspect sentences, though not uniformly, and they are slow on CPU, so all three models remain, selectable at runtime, with TF-IDF as the default.
 
-### 3. Data: from English to Chinese
+DVC's remote moved once. With no Azure account at the outset, a local directory served as a placeholder remote. After the Azure student account arrived, a Storage Account and container were created and the remote switched to Azure Blob. The first push timed out on the large files — an intermittent China-to-Azure latency issue — and succeeded on retry.
 
-I started with SemEval-2014 restaurant reviews (English). Two requirements forced a rethink:
+Experiment tracking followed the course's MLflow guide, local first, then DagsHub. That surfaced a version clash: MLflow 3.x calls a `CreateLoggedModel` endpoint that DagsHub's 2.x server does not implement, so the client is pinned to `mlflow<3`.
 
-- The app must output **four fixed aspects** (taste/service/price/ambience), so I moved from aspect-term to aspect-category labeling.
-- The UI must be bilingual and support Chinese input, so I needed a Chinese dataset.
+The application itself grew from a single `/predict` endpoint through four-aspect output, a bilingual UI, a model selector, CSV batch import/export, saved-review CRUD, and finally a split into two pages. The most irritating bug was a `'\n'` inside the Python triple-quoted HTML string that turned into a literal newline in the generated JavaScript and silently disabled every button; it was fixed with `String.fromCharCode`.
 
-MAMS (siat-nlp) is the canonical Chinese ABSA dataset, but the actual corpus is on Google Drive and hard to fetch. **ASAP** (Meituan-Dianping) turned out to be the better fit: Chinese, hosted on GitHub, ~46,850 reviews, with 18 aspect categories that map cleanly to the four aspects, and about 10x larger than SemEval. Chinese text is tokenized at the character level — fast, no dictionary dependency, small vocab.
-
-### 4. Models: TF-IDF → LSTM → BERT/RoBERTa
-
-TF-IDF + LR came first. Its confidence numbers were ~0.45, which turned out to be honest: the "neutral" class was a catch-all. Dropping neutral and going binary (positive/negative) raised both macro-F1 and confidence without any inflation. Calibrating or forcing higher confidence only made numbers look good while hurting F1, so I skipped that.
-
-Then I wanted a deep model to beat it. My laptop has no NVIDIA GPU (Intel Iris Xe only), and fine-tuning a transformer on CPU would take hours, so I rented an **AutoDL** box (RTX 3080 Ti, pay-by-hour). I tried BiLSTM on CPU first — it underperformed because there wasn't enough data. On AutoDL I fine-tuned BERT (`bert-base-chinese`) and RoBERTa (`chinese-roberta-wwm-ext`).
-
-The result: BERT/RoBERTa beat TF-IDF on ambiguous multi-aspect sentences but not everywhere, and they're slow on CPU. So I **kept all three** behind a model selector — TF-IDF as the fast default, BERT/RoBERTa as options when accuracy matters more than speed.
-
-### 5. DVC: local directory → Azure Blob
-
-At first I had no Azure account, so I pointed DVC at a local directory to simulate a remote. The course guide (`7. DVC-with-Azure-Blob-Storage.pdf`) assumes Azure. Later I got an Azure student account (EFREI email, $100 credit), created a Storage Account and a blob container, and switched the remote to Azure Blob. First `dvc push` hit `Timeout on reading data from socket` on the large files — an intermittent China-to-Azure issue — and retrying finished it.
-
-### 6. MLflow + DagsHub
-
-Following the course's MLflow guide (`15-MLFlow.pdf`), I used local tracking first, then pointed MLflow at DagsHub. That surfaced a version clash: MLflow 3.x uses a `CreateLoggedModel` endpoint that DagsHub's 2.x server doesn't support (`INVALID_PARAMETER_VALUE`), so I pinned `mlflow<3`. Runs and registered models now land on DagsHub.
-
-### 7. The app grew
-
-It started as a single `/predict` endpoint and accumulated: 4-aspect output, bilingual UI, a model selector, CSV batch import/export, saved-review CRUD, and finally a split into two pages (analyze + history). Along the way a `'\n'` inside the Python triple-quoted HTML string became a literal newline in the generated JS and silently broke every button — replaced with `String.fromCharCode(10)`.
-
-### 8. CI/CD
-
-GitHub Actions per the course guide (`3-1. GITHUB_ACTIONS_GUIDE.pdf`): a PR to the protected branches runs ruff + pytest + a Docker build; pushing to `staging`/`main` publishes images. The Docker image is `python:3.12-slim` with runtime deps only — torch/transformers are lazy-imported so the image doesn't carry the ~2 GB deep-learning stack.
+CI/CD is GitHub Actions, following the course guide: a pull request runs ruff, pytest, and a Docker build, and pushes to staging or main publish images. The image is `python:3.12-slim` with runtime dependencies only — torch and transformers are imported lazily so the image does not carry the two-gigabyte deep-learning stack.
 
 ## Environment
 
