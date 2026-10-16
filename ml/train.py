@@ -30,7 +30,7 @@ from sklearn.linear_model import LogisticRegression
 from sklearn.metrics import accuracy_score, classification_report, f1_score
 from sklearn.pipeline import Pipeline
 
-from .aspects import ASPECTS, LABELS
+from .aspects import ASPECTS, BINARY_LABELS, LABELS
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DATA_DIR = os.path.join(ROOT, "data", "processed")
@@ -88,9 +88,9 @@ def build_aspect_labels(test: pd.DataFrame) -> pd.DataFrame:
 
 
 def train_one_aspect(train: pd.DataFrame, eval_set: pd.DataFrame, aspect: str, mode: str):
-    """Train and evaluate a single aspect classifier; log per-aspect metrics."""
-    sub = train[train["aspect"] == aspect]
-    ev = eval_set[eval_set["aspect"] == aspect]
+    """Train and evaluate a single aspect classifier (binary pos/neg); log metrics."""
+    sub = train[(train["aspect"] == aspect) & (train["label"] != "neutral")]
+    ev = eval_set[(eval_set["aspect"] == aspect) & (eval_set["label"] != "neutral")]
     if sub.empty or ev.empty:
         return None
 
@@ -99,13 +99,13 @@ def train_one_aspect(train: pd.DataFrame, eval_set: pd.DataFrame, aspect: str, m
 
     y_true = ev["label"]
     y_pred = pipeline.predict(ev["text"])
-    macro_f1 = f1_score(y_true, y_pred, average="macro", labels=LABELS)
+    macro_f1 = f1_score(y_true, y_pred, average="macro", labels=BINARY_LABELS)
     acc = accuracy_score(y_true, y_pred)
 
     mlflow.log_metric(f"{aspect}_macro_f1", macro_f1)
     mlflow.log_metric(f"{aspect}_accuracy", acc)
-    report = classification_report(y_true, y_pred, labels=LABELS, output_dict=True)
-    for label in LABELS:
+    report = classification_report(y_true, y_pred, labels=BINARY_LABELS, output_dict=True)
+    for label in BINARY_LABELS:
         mlflow.log_metric(f"{aspect}_{label}_f1", report[label]["f1-score"])
 
     print(f"  [{aspect}] {mode}: macro_f1={macro_f1:.4f} accuracy={acc:.4f} (n={len(ev)})")

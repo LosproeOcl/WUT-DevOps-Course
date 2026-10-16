@@ -28,6 +28,7 @@ ASPECT_NAMES = {
 }
 
 LABELS = ["negative", "neutral", "positive"]
+BINARY_LABELS = ["negative", "positive"]
 
 
 def map_category(category: str) -> str | None:

@@ -10,6 +10,9 @@ from ml.aspects import ASPECTS
 
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
+# Below this confidence the aspect is reported as "neutral" (uncertain).
+UNCERTAIN_THRESHOLD = 0.55
+
 
 def default_model_path() -> str:
     return os.path.join(_ROOT, "models", "model.joblib")
@@ -40,11 +43,13 @@ def predict_aspects(text: str, path: str | None = None) -> list[dict]:
         probs = pipeline.predict_proba([text])[0]
         classes = [str(c) for c in pipeline.classes_]
         best = int(probs.argmax())
+        confidence = float(probs[best])
+        label = classes[best] if confidence >= UNCERTAIN_THRESHOLD else "neutral"
         results.append(
             {
                 "aspect": aspect,
-                "label": classes[best],
-                "confidence": round(float(probs[best]), 4),
+                "label": label,
+                "confidence": round(confidence, 4),
                 "distribution": {c: round(float(p), 4) for c, p in zip(classes, probs)},
             }
         )
