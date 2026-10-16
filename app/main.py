@@ -30,13 +30,13 @@ def load_demo_set() -> pd.DataFrame:
 
 
 _PAGE = """<!doctype html>
-<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aspect-Based Sentiment Analysis</title>
 <style>
   body { font-family: -apple-system, "Segoe UI", "Microsoft YaHei", Roboto, sans-serif; max-width: 760px; margin: 2rem auto; padding: 0 1rem; color: #1f2937; }
   .header { display: flex; align-items: center; justify-content: space-between; }
   h1 { font-size: 1.5rem; }
-  .lang { border: 1px solid #d1d5db; background: #fff; border-radius: 999px; padding: .3rem .8rem; cursor: pointer; font-size: .9rem; }
+  .lang { border: 1px solid #d1d5db; background: #fff; border-radius: 999px; padding: .35rem .9rem; cursor: pointer; font-size: .95rem; font-weight: 600; color: #2563eb; }
   textarea { width: 100%; box-sizing: border-box; padding: .7rem; font-size: 1rem; border: 1px solid #d1d5db; border-radius: 8px; resize: vertical; }
   button.action { padding: .6rem 1.2rem; font-size: 1rem; border: 0; border-radius: 8px; cursor: pointer; background: #2563eb; color: #fff; margin-top: .5rem; }
   button.secondary { background: #6b7280; margin-left: .5rem; }
@@ -52,7 +52,7 @@ _PAGE = """<!doctype html>
   .bar span { display: block; height: 100%; background: #2563eb; }
   .reveal { font-size: .85rem; color: #6b7280; margin-top: .4rem; }
 </style></head><body>
-<div class="header"><h1 data-i18n="title">Aspect-Based Sentiment Analysis</h1><button class="lang" id="lang-toggle">中</button></div>
+<div class="header"><h1 data-i18n="title">Aspect-Based Sentiment Analysis</h1><button class="lang" id="lang-toggle">English</button></div>
 <p data-i18n="subtitle">Enter a restaurant review to analyze its sentiment across four aspects.</p>
 <label data-i18n="reviewLabel">Review</label>
 <textarea id="text" rows="4" data-i18n-ph="reviewPlaceholder"></textarea>
@@ -94,7 +94,7 @@ _PAGE = """<!doctype html>
       noDemo: "暂无演示样本。",
     }
   };
-  let lang = 'en';
+  let lang = 'zh';
   let trueLabels = null;
   const results = document.getElementById('results');
   const t = () => I18N[lang];
@@ -104,7 +104,7 @@ _PAGE = """<!doctype html>
     const ph = t()['reviewPlaceholder'];
     const ta = document.getElementById('text');
     ta.placeholder = ph;
-    document.getElementById('lang-toggle').textContent = lang === 'en' ? '中' : 'EN';
+    document.getElementById('lang-toggle').textContent = lang === 'zh' ? 'English' : '中文';
     if (lastResult) renderResult(lastResult);
   }
   document.getElementById('lang-toggle').addEventListener('click', () => { lang = lang === 'en' ? 'zh' : 'en'; applyLang(); });
