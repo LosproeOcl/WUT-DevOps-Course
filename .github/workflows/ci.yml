@@ -27,8 +27,8 @@ jobs:
           python -m pip install -r requirements-dev.txt
       - name: Lint (ruff)
         run: ruff check app ml tests scripts
-      - name: Run tests
-        run: python -m pytest
+      - name: Run tests with coverage
+        run: python -m pytest --cov=app --cov-report=term-missing
       - name: Build Docker image
         run: docker build -t absa-app:ci .
 
