@@ -134,7 +134,13 @@ Binary per aspect (positive vs negative); the "neutral" class is dropped at trai
 | BERT (bert-base-chinese, 3 ep) | AutoDL GPU, `ml/train_bert.py` | 0.758 / 0.806 / 0.758 / 0.824 |
 | RoBERTa (chinese-wwm-ext, 3 ep) | AutoDL GPU | 0.765 / 0.803 / 0.763 / 0.789 |
 
-A separate **star-rating predictor** (`ml/train_rating.py`) classifies the overall 1-5 rating (the `star` column in ASAP): accuracy 0.559, MAE 0.512.
+A separate **star-rating predictor** classifies the overall 1-5 rating (the `star` column in ASAP):
+
+| Rating model | Where | accuracy | MAE | within ±1 |
+|--------------|-------|----------|-----|-----------|
+| TF-IDF + LR | CPU, `ml/train_rating.py` | 0.559 | 0.512 | — |
+| BERT (bert-base-chinese, 4 ep) | AutoDL GPU | 0.581 | 0.466 | 0.957 |
+| RoBERTa (chinese-wwm-ext, 5 ep) | AutoDL GPU, `ml/train_rating_bert.py` | **0.592** | **0.446** | 0.964 |
 
 ```bash
 python -m ml.data_pipeline              # build v1/v2 CSVs
@@ -142,9 +148,11 @@ python -m ml.train --data-version v2 --mode tuned   # TF-IDF + LR, logs to MLflo
 python -m ml.train_lstm --data-version v2           # BiLSTM
 python -m ml.train_bert --data-dir data --epochs 3  # BERT/RoBERTa (GPU recommended)
 python -m ml.train_rating                           # star rating
+python -m ml.train_rating_bert --model-path ...     # star rating (GPU, RoBERTa)
+python -m ml.register_rating_roberta                # register rating RoBERTa to MLflow
 ```
 
-Registered on DagsHub: `absa_restaurant` (unified TF-IDF+LR, Production), `absa_restaurant_rating` (Production), `absa_restaurant_bert` (Staging), `absa_restaurant_roberta` and `absa_restaurant_lstm` (Archived). Stage transitions live in `ml/stage_models.py`; registry-based serving is demonstrated by `ml/serve_model.py` (`mlflow.pyfunc.load_model("models:/absa_restaurant/Production")`).
+Registered on DagsHub: `absa_restaurant` (unified TF-IDF+LR, Production), `absa_restaurant_rating` (TF-IDF rating, Production), `absa_restaurant_rating_roberta` (RoBERTa rating, Production), `absa_restaurant_bert` (Staging), `absa_restaurant_roberta` and `absa_restaurant_lstm` (Archived). Stage transitions live in `ml/stage_models.py`; registry-based serving is demonstrated by `ml/serve_model.py` (`mlflow.pyfunc.load_model("models:/absa_restaurant/Production")`).
 
 ## Course requirements — configuration guide
 

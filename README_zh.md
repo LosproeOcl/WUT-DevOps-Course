@@ -134,7 +134,13 @@ dvc push
 | BERT（bert-base-chinese，3 epoch） | AutoDL GPU，`ml/train_bert.py` | 0.758 / 0.806 / 0.758 / 0.824 |
 | RoBERTa（chinese-wwm-ext，3 epoch） | AutoDL GPU | 0.765 / 0.803 / 0.763 / 0.789 |
 
-另有独立的**星级评分模型**（`ml/train_rating.py`）对 1-5 星做分类（用 ASAP 的 `star` 列）：准确率 0.559、MAE 0.512。
+另有独立的**星级评分模型**对 1-5 星做分类（用 ASAP 的 `star` 列）：
+
+| 星级模型 | 位置 | 准确率 | MAE | ±1 星内 |
+|----------|------|--------|-----|---------|
+| TF-IDF + LR | CPU，`ml/train_rating.py` | 0.559 | 0.512 | — |
+| BERT（bert-base-chinese，4 epoch） | AutoDL GPU | 0.581 | 0.466 | 0.957 |
+| RoBERTa（chinese-wwm-ext，5 epoch） | AutoDL GPU，`ml/train_rating_bert.py` | **0.592** | **0.446** | 0.964 |
 
 ```bash
 python -m ml.data_pipeline              # 生成 v1/v2 CSV
@@ -142,9 +148,11 @@ python -m ml.train --data-version v2 --mode tuned   # TF-IDF + LR，写 MLflow
 python -m ml.train_lstm --data-version v2           # BiLSTM
 python -m ml.train_bert --data-dir data --epochs 3  # BERT/RoBERTa（建议 GPU）
 python -m ml.train_rating                           # 星级评分
+python -m ml.train_rating_bert --model-path ...     # 星级评分（GPU，RoBERTa）
+python -m ml.register_rating_roberta                # 注册星级 RoBERTa 到 MLflow
 ```
 
-DagsHub 上注册：`absa_restaurant`（统一 TF-IDF+LR，Production）、`absa_restaurant_rating`（Production）、`absa_restaurant_bert`（Staging）、`absa_restaurant_roberta` 与 `absa_restaurant_lstm`（Archived）。stage 迁移在 `ml/stage_models.py`；基于注册表的部署由 `ml/serve_model.py` 演示（`mlflow.pyfunc.load_model("models:/absa_restaurant/Production")`）。
+DagsHub 上注册：`absa_restaurant`（统一 TF-IDF+LR，Production）、`absa_restaurant_rating`（TF-IDF 星级，Production）、`absa_restaurant_rating_roberta`（RoBERTa 星级，Production）、`absa_restaurant_bert`（Staging）、`absa_restaurant_roberta` 与 `absa_restaurant_lstm`（Archived）。stage 迁移在 `ml/stage_models.py`；基于注册表的部署由 `ml/serve_model.py` 演示（`mlflow.pyfunc.load_model("models:/absa_restaurant/Production")`）。
 
 ## 课程要求对照 — 配置指示
 
