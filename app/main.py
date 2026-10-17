@@ -71,6 +71,10 @@ _CSS = """
   .nav a { color:var(--muted); text-decoration:none; font-size:.9rem; padding:.2rem .1rem; border-bottom:2px solid transparent; }
   .nav a.active, .nav a:hover { color:var(--accent); border-bottom-color:var(--accent); }
   .lang { flex:0 0 auto; margin-left:1rem; padding:.3rem .8rem; border:1px solid var(--border); background:var(--card); border-radius:4px; cursor:pointer; font-size:.85rem; color:var(--accent); }
+  .guide { background:var(--card); border:1px solid var(--border); border-radius:4px; padding:1rem 1.4rem; margin-bottom:1.2rem; }
+  .guide-title { margin:0 0 .3rem; font-size:.95rem; font-weight:400; color:var(--accent); }
+  .guide-text { margin:0; color:var(--muted); font-size:.86rem; }
+  .hint { margin:.4rem 0 0; font-size:.8rem; color:#b0b0b0; }
   .card { background:var(--card); border:1px solid var(--border); border-radius:4px; padding:1.4rem; margin-bottom:1.2rem; }
   label { display:block; font-size:.85rem; color:var(--muted); margin:.7rem 0 .3rem; }
   textarea, select, input[type=file] { width:100%; padding:.55rem .7rem; font-size:.95rem; border:1px solid var(--border); border-radius:4px; background:#fff; color:var(--text); font-family:inherit; line-height:1.5; }
@@ -104,7 +108,9 @@ _CSS = """
   .rating { display:flex; align-items:center; gap:.5rem; margin-top:1.1rem; font-size:.95rem; }
   .rating-stars { color:#f5a623; letter-spacing:.1rem; }
   .rating-text { color:var(--muted); }
+  .rating-hint { color:#b0b0b0; font-size:.78rem; }
   .explain { margin-top:.4rem; font-size:.78rem; }
+  .explain-hint { color:#b0b0b0; margin-right:.6rem; font-size:.76rem; }
   .explain-pos { color:var(--positive); margin-right:.6rem; }
   .explain-neg { color:var(--negative); }
   .footnote { color:#b0b0b0; font-size:.76rem; margin-top:1.4rem; text-align:center; }
@@ -133,8 +139,11 @@ _I18N = """
     en: {
       title: "Aspect-Based Sentiment Analysis",
       subtitle: "Enter a restaurant review to analyze its sentiment across four aspects.",
+      guideTitle: "How it works",
+      guide: "1. Paste a review · 2. Pick a model and click Analyze · 3. Read the four aspects, the overall star rating, and the keyword explanations.",
       navAnalyze: "Analyze", navHistory: "History",
       reviewLabel: "Review", modelLabel: "Model",
+      modelHint: "TF-IDF + LR is fast (default). BERT / RoBERTa are more accurate but slower; the first load downloads the model.",
       reviewPlaceholder: "The food was fantastic but the service was slow.",
       predict: "Analyze", analyzing: "Analyzing...", save: "Save result", demo: "Random demo sample",
       batchLabel: "Batch import (CSV)", template: "Download template", batch: "Batch analyze",
@@ -144,6 +153,8 @@ _I18N = """
       aspects: { food: "Taste", service: "Service", price: "Price", ambience: "Ambience" },
       labels: { negative: "Negative", neutral: "Neutral", positive: "Positive" },
       confidence: "confidence", trueLabel: "True label", hit: "hit", miss: "miss", ratingLabel: "Overall rating",
+      ratingHint: "Overall star rating (1-5), predicted by a fine-tuned BERT model.",
+      explainHint: "Key words: + push toward positive, - toward negative (SHAP).",
       empty: "Please enter a review.", noDemo: "No demo samples available.",
       loading: "Loading model (first run may take a few seconds)...",
       noFile: "Please choose a CSV file first.", batchDone: "Done, saved and downloaded results.csv",
@@ -155,8 +166,11 @@ _I18N = """
     zh: {
       title: "方面级情感分析",
       subtitle: "输入一条餐厅评论，分析其在口味、服务、价格、环境四个方面的情感。",
+      guideTitle: "使用说明",
+      guide: "① 粘贴评论 → ② 选模型并点击「分析」→ ③ 查看四个方面的情感、整体星级评分与关键词解释。",
       navAnalyze: "分析", navHistory: "历史记录",
       reviewLabel: "评论", modelLabel: "模型",
+      modelHint: "TF-IDF + 逻辑回归：快（默认）。BERT / RoBERTa：更准但较慢，首次加载需下载模型。",
       reviewPlaceholder: "食物很棒，但服务太慢了。",
       predict: "分析", analyzing: "分析中…", save: "保存结果", demo: "随机演示样本",
       batchLabel: "批量导入（CSV）", template: "下载模板", batch: "批量分析",
@@ -166,6 +180,8 @@ _I18N = """
       aspects: { food: "口味", service: "服务", price: "价格", ambience: "环境" },
       labels: { negative: "负面", neutral: "中性", positive: "正面" },
       confidence: "置信度", trueLabel: "真实标签", hit: "命中", miss: "未命中", ratingLabel: "整体评分",
+      ratingHint: "整体星级评分（1-5），由微调的 BERT 模型预测。",
+      explainHint: "关键词：+ 表示推向正面，- 表示推向负面（SHAP）。",
       empty: "请输入评论。", noDemo: "暂无演示样本。",
       loading: "正在加载模型（首次运行可能需要几秒）…",
       noFile: "请先选择 CSV 文件。", batchDone: "处理完成，已保存并下载 results.csv",
@@ -199,6 +215,10 @@ _PAGE = """<!doctype html>
 <html lang="zh"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Aspect-Based Sentiment Analysis</title><style>""" + _CSS + """</style></head><body>
 <div class="page">""" + _HEADER + """
+  <div class="guide">
+    <h2 class="guide-title" data-i18n="guideTitle">How it works</h2>
+    <p class="guide-text" data-i18n="guide">1. Paste a review · 2. Pick a model and click Analyze · 3. Read the four aspects, the overall star rating, and the keyword explanations.</p>
+  </div>
   <main class="card">
     <label data-i18n="reviewLabel">Review</label>
     <textarea id="text" rows="4" data-i18n-ph="reviewPlaceholder"></textarea>
@@ -208,6 +228,7 @@ _PAGE = """<!doctype html>
       <option value="bert">BERT (bert-base-chinese)</option>
       <option value="roberta">RoBERTa (chinese-wwm-ext)</option>
     </select>
+    <p class="hint" data-i18n="modelHint">TF-IDF + LR is fast (default). BERT / RoBERTa are more accurate but slower; the first load downloads the model.</p>
     <div class="actions">
       <button class="btn primary" id="predict"><span class="spinner" id="spinner"></span><span data-i18n="predict">Analyze</span></button>
       <button class="btn ghost" id="save" data-i18n="save">Save result</button>
@@ -253,7 +274,8 @@ _PAGE = """<!doctype html>
     if (data.rating && data.rating.star) {
       const stars = '★'.repeat(data.rating.star) + '☆'.repeat(5 - data.rating.star);
       rating.innerHTML = '<div class="rating"><span class="rating-stars">' + stars + '</span>' +
-        '<span class="rating-text">' + t().ratingLabel + ': ' + data.rating.star + ' / 5</span></div>';
+        '<span class="rating-text">' + t().ratingLabel + ': ' + data.rating.star + ' / 5</span>' +
+        '<span class="rating-hint">' + t().ratingHint + '</span></div>';
     } else {
       rating.innerHTML = '';
     }
@@ -271,7 +293,7 @@ _PAGE = """<!doctype html>
       if (exp && (exp.positive.length || exp.negative.length)) {
         const pos = exp.positive.map(x => x[0]).join(' ');
         const neg = exp.negative.map(x => x[0]).join(' ');
-        explain = '<div class="explain">' +
+        explain = '<div class="explain"><span class="explain-hint">' + t().explainHint + '</span>' +
           (exp.positive.length ? '<span class="explain-pos">+ ' + pos + '</span>' : '') +
           (exp.negative.length ? '<span class="explain-neg">- ' + neg + '</span>' : '') +
           '</div>';

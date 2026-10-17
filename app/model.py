@@ -10,6 +10,7 @@ TF-IDF model without the (heavy) deep-learning stack.
 """
 from __future__ import annotations
 
+import logging
 import os
 from functools import lru_cache
 
@@ -17,11 +18,14 @@ import joblib
 
 from ml.aspects import ASPECTS, tokenize_zh
 
+logger = logging.getLogger(__name__)
+
 _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _MODELS_DIR = os.path.join(_ROOT, "models")
 
 UNCERTAIN_THRESHOLD = 0.55
 BERT_MAX_LEN = 128
+RATING_MAX_LEN = 256
 
 AVAILABLE_MODELS = [
     {"key": "tfidf", "name": "TF-IDF + LR"},
@@ -145,17 +149,68 @@ def _load_rating():
     return joblib.load(path)
 
 
+def _predict_rating_tfidf(tokenized: str) -> dict:
+    pipeline = _load_rating()
+    probs = pipeline.predict_proba([tokenized])[0]
+    classes = [int(c) for c in pipeline.classes_]
+    best = int(probs.argmax())
+    return {"star": classes[best], "confidence": round(float(probs[best]), 4)}
+
+
+@lru_cache(maxsize=1)
+def _load_rating_bert():
+    import torch
+    from torch import nn
+    from transformers import AutoModel, AutoTokenizer, BertConfig
+
+    class _BertRating(nn.Module):
+        def __init__(self, config):
+            super().__init__()
+            self.bert = AutoModel.from_config(config)
+            self.head = nn.Linear(self.bert.config.hidden_size, 5)
+
+        def forward(self, input_ids, attention_mask):
+            out = self.bert(input_ids=input_ids, attention_mask=attention_mask)
+            return self.head(out.last_hidden_state[:, 0, :])
+
+    model_dir = os.path.join(_MODELS_DIR, "rating_bert")
+    state_path = os.path.join(model_dir, "rating_bert.pt")
+    if not os.path.exists(state_path):
+        raise FileNotFoundError(f"rating BERT model not found: {state_path}")
+    data = torch.load(state_path, map_location="cpu", weights_only=False)
+    config = BertConfig.from_dict(data["config"])
+    model = _BertRating(config)
+    model.load_state_dict(data["state_dict"])
+    model.eval()
+    tokenizer = AutoTokenizer.from_pretrained(model_dir)
+    return model, tokenizer
+
+
+def _predict_rating_bert(text: str) -> dict:
+    import torch
+
+    model, tokenizer = _load_rating_bert()
+    enc = tokenizer(text, max_length=RATING_MAX_LEN, truncation=True, padding="max_length", return_tensors="pt")
+    with torch.no_grad():
+        logits = model(enc["input_ids"], enc["attention_mask"])[0]
+    probs = torch.softmax(logits, dim=0)
+    star = int(probs.argmax()) + 1
+    return {"star": star, "confidence": round(float(probs.max()), 4)}
+
+
 def predict_rating(text: str) -> dict:
-    """Predict the overall star rating (1-5) for a review."""
+    """Predict the overall star rating (1-5), preferring the fine-tuned BERT."""
     text = (text or "").strip()
     if not text:
         raise ValueError("text must not be empty")
 
-    pipeline = _load_rating()
-    probs = pipeline.predict_proba([tokenize_zh(text)])[0]
-    classes = [int(c) for c in pipeline.classes_]
-    best = int(probs.argmax())
-    return {"star": classes[best], "confidence": round(float(probs[best]), 4)}
+    rating_bert_path = os.path.join(_MODELS_DIR, "rating_bert", "rating_bert.pt")
+    if os.path.exists(rating_bert_path):
+        try:
+            return _predict_rating_bert(text)
+        except Exception as exc:  # noqa: BLE001 - fall back to TF-IDF on any error
+            logger.warning("rating BERT unavailable, falling back to TF-IDF: %s", exc)
+    return _predict_rating_tfidf(tokenize_zh(text))
 
 
 def explain_aspects(text: str, top_k: int = 5) -> list[dict]:
