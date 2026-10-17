@@ -12,6 +12,7 @@ import {
 } from '../api'
 
 const text = ref('')
+const textRef = ref(null)
 const model = ref('tfidf')
 const models = ref([])
 const loading = ref(false)
@@ -30,6 +31,23 @@ const batchStatusError = ref(false)
 function setStatus(msg, isError = false) {
   status.value = msg
   statusError.value = isError
+}
+
+function clearText() {
+  text.value = ''
+  aspects.value = []
+  rating.value = null
+  explanation.value = {}
+  status.value = ''
+  statusError.value = false
+  if (textRef.value) textRef.value.focus()
+}
+
+function onKeydown(e) {
+  if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+    e.preventDefault()
+    predict()
+  }
 }
 
 function starString(star) {
@@ -165,7 +183,13 @@ onMounted(async () => {
 
       <div class="field">
         <label for="text">{{ t('reviewLabel') }}</label>
-        <textarea id="text" v-model="text" :placeholder="t('reviewPlaceholder')"></textarea>
+        <div class="input-wrap">
+          <textarea id="text" ref="textRef" v-model="text" :placeholder="t('reviewPlaceholder')" @keydown="onKeydown"></textarea>
+          <button v-if="text" class="clear-btn" :title="t('clear')" @click="clearText">×</button>
+        </div>
+        <div class="input-footer">
+          <span class="counter">{{ text.length }} {{ t('chars') }}</span>
+        </div>
       </div>
 
       <div class="field">
@@ -180,8 +204,8 @@ onMounted(async () => {
         <button class="btn primary" :disabled="loading" @click="predict">
           <span v-if="loading" class="spinner"></span>{{ loading ? t('analyzing') : t('predict') }}
         </button>
-        <button class="btn" @click="save">{{ t('save') }}</button>
-        <button class="btn" @click="demo">{{ t('demo') }}</button>
+        <button class="btn" :disabled="loading" @click="save">{{ t('save') }}</button>
+        <button class="btn" :disabled="loading" @click="demo">{{ t('demo') }}</button>
       </div>
       <div class="status" :class="{ error: statusError }">{{ status }}</div>
     </section>

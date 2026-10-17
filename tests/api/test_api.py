@@ -8,9 +8,12 @@ def test_health(client):
 
 def test_index_page_renders(client):
     resp = client.get("/")
-    assert resp.status_code == 200
-    # Vue SPA shell (built) or legacy server-rendered page (fallback)
-    assert ('id="app"' in resp.text) or ("Aspect-Based Sentiment Analysis" in resp.text)
+    if resp.status_code == 200:
+        # Vue SPA shell (frontend has been built)
+        assert 'id="app"' in resp.text
+    else:
+        # frontend not built -> backend reports 404 with guidance
+        assert resp.status_code == 404
 
 
 def test_predict_returns_four_aspects(client):

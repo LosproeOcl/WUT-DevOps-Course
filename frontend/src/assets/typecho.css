@@ -170,7 +170,7 @@ input[type="url"],
 input[type="password"],
 textarea,
 select {
-  padding: 7px 9px;
+  padding: 8px 10px;
   border: 1px solid var(--border-input);
   border-radius: 2px;
   width: 100%;
@@ -179,13 +179,46 @@ select {
   font-family: var(--serif);
   font-size: 1em;
   line-height: 1.6;
+  transition: border-color .2s ease, box-shadow .2s ease, background .2s ease;
 }
-textarea { resize: vertical; min-height: 110px; }
+textarea { resize: vertical; min-height: 120px; }
+input:hover, textarea:hover, select:hover { border-color: #d5d5d5; }
 input:focus, textarea:focus, select:focus {
   outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(51, 84, 170, 0.12);
+  background: #fff;
 }
+textarea::placeholder { color: #bbbbbb; font-style: italic; }
 input[type="file"] { padding: 5px 0; border: none; width: auto; }
+
+/* textarea clear button + counter */
+.input-wrap { position: relative; }
+.input-wrap textarea { padding-right: 34px; }
+.clear-btn {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: #f0f0f0;
+  color: #999;
+  cursor: pointer;
+  line-height: 20px;
+  text-align: center;
+  font-size: 15px;
+  padding: 0;
+  transition: background .15s, color .15s;
+}
+.clear-btn:hover { background: #e0e0e0; color: #444; }
+.input-footer {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 4px;
+}
+.counter { font-size: .8em; color: #b0b0b0; font-family: var(--sans); }
 
 /* ---------------- Buttons ---------------- */
 .actions { margin-top: 16px; display: flex; flex-wrap: wrap; gap: 8px; }
@@ -231,6 +264,10 @@ input[type="file"] { padding: 5px 0; border: none; width: auto; }
 .status.error { color: var(--negative); }
 
 /* ---------------- Rating ---------------- */
+@keyframes fadeInUp {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
 .rating {
   display: flex;
   align-items: baseline;
@@ -239,6 +276,7 @@ input[type="file"] { padding: 5px 0; border: none; width: auto; }
   margin: 20px 0 4px;
   padding-bottom: 12px;
   border-bottom: 1px solid var(--border);
+  animation: fadeInUp .35s ease;
 }
 .rating-stars { color: #f0a030; letter-spacing: 2px; font-size: 1.35em; }
 .rating-text { color: var(--text); font-size: 1em; }
@@ -257,7 +295,11 @@ input[type="file"] { padding: 5px 0; border: none; width: auto; }
   padding: 16px 18px;
   border: 1px solid var(--border);
   border-radius: 2px;
+  animation: fadeInUp .35s ease;
 }
+.aspect-card:nth-child(2) { animation-delay: .05s; }
+.aspect-card:nth-child(3) { animation-delay: .1s; }
+.aspect-card:nth-child(4) { animation-delay: .15s; }
 .aspect-card h3 {
   margin: 0 0 8px;
   font-size: 1em;
