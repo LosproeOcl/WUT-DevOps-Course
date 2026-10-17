@@ -9,7 +9,6 @@ __pycache__/
 
 # not needed for serving
 tests/
-ml/
 scripts/
 .github/
 data/raw/

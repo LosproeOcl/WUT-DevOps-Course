@@ -15,6 +15,7 @@ COPY requirements.txt ./
 RUN python -m pip install --no-cache-dir -r requirements.txt
 
 COPY app/ ./app/
+COPY ml/ ./ml/
 COPY models/ ./models/
 COPY data/demo.csv ./data/demo.csv
 COPY --from=frontend /app/dist ./frontend/dist
