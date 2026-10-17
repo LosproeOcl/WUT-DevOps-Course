@@ -17,10 +17,12 @@
 这是 DevOps & MLOps 课程的期末项目，最后做成了一个端到端的 MLOps 小流水线：DVC 管数据、MLflow 管实验、Docker + GitHub Actions 做 CI/CD，FastAPI 应用带中英双语界面、三个可选模型、CSV 批量导入导出、以及保存结果的增删改查。
 
 **相关链接：**
+- **在线演示** — https://efrei-DevOps.losproeocl.cn
 - [DagsHub MLflow 实验](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow) — 运行、指标与参数
 - [DagsHub 模型注册表](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow/#/models) — 已注册模型与 stage
 - [DagsHub 仓库](https://dagshub.com/losproeocl/WUT-DevOps-Course) — 数据 + 代码镜像（DVC）
 - [GitHub releases](https://github.com/LosproeOcl/WUT-DevOps-Course/releases)
+- [部署指南](DEPLOYMENT.md)
 
 ## 应用功能
 
@@ -52,6 +54,7 @@ models/              训练权重（tfidf 入库；bert/roberta/lstm 已忽略�
 tests/               pytest 单元 + 接口测试
 .github/workflows/ci.yml
 Dockerfile           多阶段（前端构建 + 后端）
+Dockerfile.full      全量部署（CPU torch + transformers + 全部模型）
 ```
 
 ## 分支
@@ -273,6 +276,12 @@ python -m uvicorn app.main:app        # http://127.0.0.1:8000
 
 docker build -t absa-app .            # 多阶段：构建前端 + 后端
 docker run -p 8000:8000 absa-app
+
+# 全量部署（全部模型：BERT/RoBERTa + RoBERTa 星级，镜像约 4 GB）
+docker build -f Dockerfile.full -t absa-app:full .
+docker run -d --name absa-full --restart unless-stopped -p 8000:8000 absa-app:full
 ```
+
+生产服务器配置（swap、反向代理、冒烟测试）见 [DEPLOYMENT.md](DEPLOYMENT.md)。
 
 测试：`python -m pytest`；lint：`ruff check app ml tests scripts`。

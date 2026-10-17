@@ -17,10 +17,12 @@ A web app that takes a Chinese restaurant review and classifies its sentiment ac
 This is the final project for a DevOps & MLOps course. It ended up as a small end-to-end MLOps pipeline: DVC for data, MLflow for experiments, Docker + GitHub Actions for CI/CD, and a FastAPI app with a bilingual UI, three selectable models, CSV batch import/export, and CRUD for saved results.
 
 **Related links:**
+- **Live demo** — https://efrei-DevOps.losproeocl.cn
 - [DagsHub MLflow experiments](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow) — runs, metrics, and parameters
 - [DagsHub model registry](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow/#/models) — registered models and stages
 - [DagsHub repository](https://dagshub.com/losproeocl/WUT-DevOps-Course) — data + code mirror (DVC)
 - [GitHub releases](https://github.com/LosproeOcl/WUT-DevOps-Course/releases)
+- [Deployment guide](DEPLOYMENT.md)
 
 ## What the app does
 
@@ -52,6 +54,7 @@ models/              trained weights (tfidf committed; bert/roberta/lstm gitigno
 tests/               pytest unit + API tests
 .github/workflows/ci.yml
 Dockerfile           multi-stage (frontend build + backend)
+Dockerfile.full      full deployment (CPU torch + transformers + all models)
 ```
 
 ## Branches
@@ -273,6 +276,12 @@ python -m uvicorn app.main:app        # http://127.0.0.1:8000
 
 docker build -t absa-app .            # multi-stage: builds frontend + backend
 docker run -p 8000:8000 absa-app
+
+# full deployment (all models: BERT/RoBERTa + RoBERTa rating, ~4 GB image)
+docker build -f Dockerfile.full -t absa-app:full .
+docker run -d --name absa-full --restart unless-stopped -p 8000:8000 absa-app:full
 ```
+
+See [DEPLOYMENT.md](DEPLOYMENT.md) for the production server setup (swap, reverse proxy, smoke test).
 
 Tests: `python -m pytest`; lint: `ruff check app ml tests scripts`.
