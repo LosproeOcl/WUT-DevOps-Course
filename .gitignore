@@ -7,7 +7,7 @@ venv/
 env/
 .pytest_cache/
 .coverage
-coverage.json
+/coverage.json
 htmlcov/
 
 # ---- Environment & secrets ----
