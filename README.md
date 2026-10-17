@@ -27,11 +27,13 @@ This is the final project for a DevOps & MLOps course. It ended up as a small en
 ## Repo layout
 
 ```
-app/                 FastAPI app
-  main.py            routes + the two HTML pages
-  model.py           model loading + inference (tfidf / bert / roberta)
+app/                 FastAPI app (API + serves the built SPA)
+  main.py            routes + static SPA serving
+  model.py           model loading + inference (tfidf / bert / roberta + rating)
   database.py        SQLite layer for saved reviews
   schemas.py         Pydantic models
+frontend/            Vue 3 + Vite SPA (frontend-backend separation, Typecho-inspired)
+  src/               components, views, i18n, api client
 ml/                  training + data code
   data_pipeline.py   ASAP CSV -> (text, aspect, polarity) rows, v1/v2
   train.py           TF-IDF + LR, logs to MLflow
@@ -42,7 +44,7 @@ data/                raw/ processed/ (DVC), demo.csv
 models/              trained weights (tfidf committed; bert/roberta/lstm gitignored)
 tests/               pytest unit + API tests
 .github/workflows/ci.yml
-Dockerfile
+Dockerfile           multi-stage (frontend build + backend)
 ```
 
 ## Branches
@@ -230,11 +232,21 @@ README.md  README_zh.md  DEPLOYMENT.md
 
 ## Running
 
-```bash
-python -m uvicorn app.main:app --reload      # or: python -m app.main
-# http://127.0.0.1:8000 (analyze)  /history (saved records)
+The frontend (Vue 3 + Vite) is decoupled from the backend (FastAPI). For development run both; for production build the SPA and let FastAPI serve it.
 
-docker build -t absa-app .
+```bash
+# 1. backend (API on :8000)
+python -m uvicorn app.main:app --reload
+
+# 2. frontend dev server (Vite on :5173, proxies /api -> :8000)
+cd frontend && npm install && npm run dev
+# http://127.0.0.1:5173
+
+# production: build the SPA, then FastAPI serves it at :8000
+cd frontend && npm run build
+python -m uvicorn app.main:app        # http://127.0.0.1:8000
+
+docker build -t absa-app .            # multi-stage: builds frontend + backend
 docker run -p 8000:8000 absa-app
 ```
 

@@ -27,11 +27,13 @@
 ## 目录结构
 
 ```
-app/                 FastAPI 应用
-  main.py            路由 + 两个 HTML 页面
-  model.py           模型加载与推理（tfidf / bert / roberta）
+app/                 FastAPI 应用（API + 提供构建后的 SPA）
+  main.py            路由 + 静态 SPA 服务
+  model.py           模型加载与推理（tfidf / bert / roberta + 星级）
   database.py        保存记录的 SQLite 层
   schemas.py         Pydantic 模型
+frontend/            Vue 3 + Vite 单页应用（前后端分离，仿 Typecho）
+  src/               组件、视图、i18n、API 客户端
 ml/                  训练与数据代码
   data_pipeline.py   ASAP CSV -> (text, aspect, polarity) 行，v1/v2
   train.py           TF-IDF + LR，日志进 MLflow
@@ -42,7 +44,7 @@ data/                raw/ processed/（DVC）、demo.csv
 models/              训练权重（tfidf 入库；bert/roberta/lstm 已忽略）
 tests/               pytest 单元 + 接口测试
 .github/workflows/ci.yml
-Dockerfile
+Dockerfile           多阶段（前端构建 + 后端）
 ```
 
 ## 分支
@@ -230,11 +232,21 @@ README.md  README_zh.md  DEPLOYMENT.md
 
 ## 运行
 
-```bash
-python -m uvicorn app.main:app --reload      # 或：python -m app.main
-# http://127.0.0.1:8000 （分析）  /history（历史记录）
+前端（Vue 3 + Vite）与后端（FastAPI）解耦。开发时分别启动；生产时构建 SPA 后由 FastAPI 托管。
 
-docker build -t absa-app .
+```bash
+# 1. 后端（API，:8000）
+python -m uvicorn app.main:app --reload
+
+# 2. 前端开发服务器（Vite，:5173，代理 /api -> :8000）
+cd frontend && npm install && npm run dev
+# http://127.0.0.1:5173
+
+# 生产：构建 SPA，再由 FastAPI 在 :8000 提供服务
+cd frontend && npm run build
+python -m uvicorn app.main:app        # http://127.0.0.1:8000
+
+docker build -t absa-app .            # 多阶段：构建前端 + 后端
 docker run -p 8000:8000 absa-app
 ```
 

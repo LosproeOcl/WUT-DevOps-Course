@@ -21,6 +21,11 @@ mlruns/
 models/lstm.joblib
 models/bert/
 models/roberta/
+models/rating_bert/
 .gitignore
 .dockerignore
 .dvcignore
+
+# frontend build artifacts
+frontend/node_modules/
+frontend/dist/

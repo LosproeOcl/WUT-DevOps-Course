@@ -25,7 +25,7 @@ _MODELS_DIR = os.path.join(_ROOT, "models")
 
 UNCERTAIN_THRESHOLD = 0.55
 BERT_MAX_LEN = 128
-RATING_MAX_LEN = 256
+RATING_MAX_LEN = 384
 
 AVAILABLE_MODELS = [
     {"key": "tfidf", "name": "TF-IDF + LR"},
@@ -161,7 +161,7 @@ def _predict_rating_tfidf(tokenized: str) -> dict:
 def _load_rating_bert():
     import torch
     from torch import nn
-    from transformers import AutoModel, AutoTokenizer, BertConfig
+    from transformers import AutoConfig, AutoModel, AutoTokenizer
 
     class _BertRating(nn.Module):
         def __init__(self, config):
@@ -178,7 +178,7 @@ def _load_rating_bert():
     if not os.path.exists(state_path):
         raise FileNotFoundError(f"rating BERT model not found: {state_path}")
     data = torch.load(state_path, map_location="cpu", weights_only=False)
-    config = BertConfig.from_dict(data["config"])
+    config = AutoConfig.from_dict(data["config"])
     model = _BertRating(config)
     model.load_state_dict(data["state_dict"])
     model.eval()

@@ -14,7 +14,14 @@ from functools import lru_cache
 
 import pandas as pd
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
-from fastapi.responses import HTMLResponse, JSONResponse, Response, StreamingResponse
+from fastapi.responses import (
+    FileResponse,
+    HTMLResponse,
+    JSONResponse,
+    Response,
+    StreamingResponse,
+)
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from . import database
@@ -25,6 +32,7 @@ _ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DEMO_CSV = os.path.join(_ROOT, "data", "demo.csv")
 REVIEWS_DB_ENV = "REVIEWS_DB_PATH"
 DEFAULT_DB = os.path.join(_ROOT, "reviews.db")
+FRONTEND_DIST = os.path.join(_ROOT, "frontend", "dist")
 
 app = FastAPI(title="Aspect-Based Sentiment Analysis")
 
@@ -487,13 +495,24 @@ _HISTORY_PAGE = """<!doctype html>
 </body></html>"""
 
 
-@app.get("/", response_class=HTMLResponse, include_in_schema=False)
-def index() -> HTMLResponse:
+def _spa_index() -> Response:
+    """Serve the built Vue SPA if present, otherwise the legacy server-rendered page."""
+    index_path = os.path.join(FRONTEND_DIST, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
     return HTMLResponse(_PAGE)
 
 
-@app.get("/history", response_class=HTMLResponse, include_in_schema=False)
-def history_page() -> HTMLResponse:
+@app.get("/", include_in_schema=False)
+def index() -> Response:
+    return _spa_index()
+
+
+@app.get("/history", include_in_schema=False)
+def history_page() -> Response:
+    index_path = os.path.join(FRONTEND_DIST, "index.html")
+    if os.path.exists(index_path):
+        return FileResponse(index_path)
     return HTMLResponse(_HISTORY_PAGE)
 
 
@@ -665,6 +684,11 @@ def delete_review_api(review_id: int) -> JSONResponse:
     if not database.delete_review(get_db_path(), review_id):
         raise HTTPException(status_code=404, detail="review not found")
     return JSONResponse({"deleted": review_id})
+
+
+_assets_dir = os.path.join(FRONTEND_DIST, "assets")
+if os.path.isdir(_assets_dir):
+    app.mount("/assets", StaticFiles(directory=_assets_dir), name="assets")
 
 
 if __name__ == "__main__":

@@ -29,6 +29,15 @@ jobs:
         run: ruff check app ml tests scripts
       - name: Run tests with coverage
         run: python -m pytest --cov=app --cov-report=term-missing --cov-report=json
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - name: Build frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
       - name: Generate coverage badge
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         run: python scripts/generate_badge.py

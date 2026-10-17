@@ -9,7 +9,8 @@ def test_health(client):
 def test_index_page_renders(client):
     resp = client.get("/")
     assert resp.status_code == 200
-    assert "Aspect-Based Sentiment Analysis" in resp.text
+    # Vue SPA shell (built) or legacy server-rendered page (fallback)
+    assert ('id="app"' in resp.text) or ("Aspect-Based Sentiment Analysis" in resp.text)
 
 
 def test_predict_returns_four_aspects(client):
