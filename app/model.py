@@ -161,7 +161,7 @@ def _predict_rating_tfidf(tokenized: str) -> dict:
 def _load_rating_bert():
     import torch
     from torch import nn
-    from transformers import AutoConfig, AutoModel, AutoTokenizer
+    from transformers import AutoModel, AutoTokenizer, BertConfig, RobertaConfig
 
     class _BertRating(nn.Module):
         def __init__(self, config):
@@ -176,13 +176,24 @@ def _load_rating_bert():
     model_dir = os.path.join(_MODELS_DIR, "rating_bert")
     state_path = os.path.join(model_dir, "rating_bert.pt")
     if not os.path.exists(state_path):
-        raise FileNotFoundError(f"rating BERT model not found: {state_path}")
+        raise FileNotFoundError(f"rating model not found: {state_path}")
     data = torch.load(state_path, map_location="cpu", weights_only=False)
-    config = AutoConfig.from_dict(data["config"])
+    config_dict = data["config"]
+    config_cls = RobertaConfig if config_dict.get("model_type") == "roberta" else BertConfig
+    config = config_cls.from_dict(config_dict)
     model = _BertRating(config)
     model.load_state_dict(data["state_dict"])
     model.eval()
     tokenizer = AutoTokenizer.from_pretrained(model_dir)
+    for name, tok in (
+        ("pad_token", "[PAD]"),
+        ("unk_token", "[UNK]"),
+        ("cls_token", "[CLS]"),
+        ("sep_token", "[SEP]"),
+        ("mask_token", "[MASK]"),
+    ):
+        if getattr(tokenizer, name) is None:
+            setattr(tokenizer, name, tok)
     return model, tokenizer
 
 

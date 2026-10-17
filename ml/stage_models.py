@@ -15,6 +15,7 @@ from mlflow.tracking import MlflowClient
 TRANSITIONS = {
     "absa_restaurant": "Production",
     "absa_restaurant_rating": "Production",
+    "absa_restaurant_rating_roberta": "Production",
     "absa_restaurant_bert": "Staging",
     "absa_restaurant_roberta": "Archived",
     "absa_restaurant_lstm": "Archived",
