@@ -135,3 +135,58 @@ def predict_aspects(text: str, model_name: str = "tfidf") -> list[dict]:
     if model_name in _MODEL_CONFIGS:
         return _predict_bert(model_name, text)
     raise ValueError(f"unknown model: {model_name}")
+
+
+@lru_cache(maxsize=1)
+def _load_rating():
+    path = os.path.join(_MODELS_DIR, "rating.joblib")
+    if not os.path.exists(path):
+        raise FileNotFoundError(f"rating model not found: {path}")
+    return joblib.load(path)
+
+
+def predict_rating(text: str) -> dict:
+    """Predict the overall star rating (1-5) for a review."""
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("text must not be empty")
+
+    pipeline = _load_rating()
+    probs = pipeline.predict_proba([tokenize_zh(text)])[0]
+    classes = [int(c) for c in pipeline.classes_]
+    best = int(probs.argmax())
+    return {"star": classes[best], "confidence": round(float(probs[best]), 4)}
+
+
+def explain_aspects(text: str, top_k: int = 5) -> list[dict]:
+    """Return the top contributing tokens per aspect (linear SHAP values).
+
+    Uses shap.LinearExplainer on the TF-IDF + LogisticRegression models, which
+    yields exact per-token SHAP values (coef * x) for a linear model.
+    """
+    import numpy as np
+    import shap
+
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("text must not be empty")
+
+    models = _load_tfidf()
+    tokenized = tokenize_zh(text)
+    results = []
+    for aspect in ASPECTS:
+        pipeline = models.get(aspect)
+        if pipeline is None:
+            results.append({"aspect": aspect, "positive": [], "negative": []})
+            continue
+        tfidf = pipeline.named_steps["tfidf"]
+        clf = pipeline.named_steps["clf"]
+        names = tfidf.get_feature_names_out()
+        X = tfidf.transform([tokenized]).toarray()
+        explainer = shap.LinearExplainer(clf, np.zeros((1, X.shape[1])))
+        sv = np.asarray(explainer.shap_values(X)).reshape(X.shape[1])
+        order = np.argsort(sv)[::-1]
+        positive = [(str(names[i]), float(sv[i])) for i in order if sv[i] > 0][:top_k]
+        negative = [(str(names[i]), float(sv[i])) for i in order[::-1] if sv[i] < 0][:top_k]
+        results.append({"aspect": aspect, "positive": positive, "negative": negative})
+    return results

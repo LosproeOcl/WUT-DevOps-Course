@@ -4,3 +4,4 @@ matplotlib
 dagshub
 torch
 transformers
+shap

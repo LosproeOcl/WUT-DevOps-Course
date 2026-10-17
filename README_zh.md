@@ -18,7 +18,7 @@
 ## 应用功能
 
 - 两个页面：`/`（分析）和 `/history`（历史记录）。
-- 输入一条评论 → 四个维度各给标签 + 置信度 + 概率条。
+- 输入一条评论 → 四个维度各给标签 + 置信度 + 概率条，以及整体星级评分（1-5）和逐词解释（SHAP，TF-IDF 模型）。
 - 三个模型可选：TF-IDF + LR、BERT、RoBERTa。
 - 上传 CSV → 逐条批量分析、结果入库、下载带原列 + 情感/置信度/概率列的 CSV。
 - 保存的结果存 SQLite，在 `/history` 页查看、编辑、单条/批量删除、导出 CSV。
@@ -132,14 +132,17 @@ dvc push
 | BERT（bert-base-chinese，3 epoch） | AutoDL GPU，`ml/train_bert.py` | 0.758 / 0.806 / 0.758 / 0.824 |
 | RoBERTa（chinese-wwm-ext，3 epoch） | AutoDL GPU | 0.765 / 0.803 / 0.763 / 0.789 |
 
+另有独立的**星级评分模型**（`ml/train_rating.py`）对 1-5 星做分类（用 ASAP 的 `star` 列）：准确率 0.559、MAE 0.512。
+
 ```bash
 python -m ml.data_pipeline              # 生成 v1/v2 CSV
 python -m ml.train --data-version v2 --mode tuned   # TF-IDF + LR，写 MLflow
 python -m ml.train_lstm --data-version v2           # BiLSTM
 python -m ml.train_bert --data-dir data --epochs 3  # BERT/RoBERTa（建议 GPU）
+python -m ml.train_rating                           # 星级评分
 ```
 
-DagsHub 上注册：`absa_restaurant`（统一 TF-IDF+LR）、`absa_restaurant_lstm`、`absa_restaurant_bert`、`absa_restaurant_roberta`。
+DagsHub 上注册：`absa_restaurant`（统一 TF-IDF+LR，Production）、`absa_restaurant_rating`（Production）、`absa_restaurant_bert`（Staging）、`absa_restaurant_roberta` 与 `absa_restaurant_lstm`（Archived）。stage 迁移在 `ml/stage_models.py`；基于注册表的部署由 `ml/serve_model.py` 演示（`mlflow.pyfunc.load_model("models:/absa_restaurant/Production")`）。
 
 ## 课程要求对照 — 配置指示
 
@@ -193,6 +196,15 @@ dvc push
 `ml/README_data.md` 记录两个版本及 v1 → v2 的变化。
 
 **MLflow。** 设置 `DAGSHUB_REPO_OWNER` / `DAGSHUB_REPO_NAME` 与 `MLFLOW_TRACKING_USERNAME` / `MLFLOW_TRACKING_PASSWORD` 后运行训练——`ml/train.py` 记录 git SHA、数据校验和、超参数、指标与模型并注册。`ml/README_experiments.md` 记录 baseline 与 tuned 的对比；`mlflow ui` 查看本地历史。
+
+**模型部署。** 用 `ml/stage_models.py` 做 stage 迁移（Staging/Production/Archived），再从注册表加载：
+
+```bash
+python -m ml.stage_models
+python -m ml.serve_model --model models:/absa_restaurant/Production --text "食物很好吃"
+# 或用 CLI：
+mlflow models serve -m models:/absa_restaurant/Production -p 5003
+```
 
 ### 目录结构
 

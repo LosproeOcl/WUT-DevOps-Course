@@ -101,6 +101,12 @@ _CSS = """
   .bar span { display:block; height:100%; background:var(--accent); transition:width .3s; }
   .dist { font-size:.76rem; color:var(--muted); }
   .reveal { font-size:.78rem; color:var(--muted); margin-top:.35rem; }
+  .rating { display:flex; align-items:center; gap:.5rem; margin-top:1.1rem; font-size:.95rem; }
+  .rating-stars { color:#f5a623; letter-spacing:.1rem; }
+  .rating-text { color:var(--muted); }
+  .explain { margin-top:.4rem; font-size:.78rem; }
+  .explain-pos { color:var(--positive); margin-right:.6rem; }
+  .explain-neg { color:var(--negative); }
   .footnote { color:#b0b0b0; font-size:.76rem; margin-top:1.4rem; text-align:center; }
   .batch-hint { font-size:.82rem; color:var(--muted); margin-top:.5rem; }
   .progress { display:none; height:6px; border-radius:3px; background:#eee; margin-top:.8rem; overflow:hidden; }
@@ -137,7 +143,7 @@ _I18N = """
       selectAll: "Select all", exportCsv: "Export CSV", deleteSelected: "Delete selected", deleteAll: "Delete all",
       aspects: { food: "Taste", service: "Service", price: "Price", ambience: "Ambience" },
       labels: { negative: "Negative", neutral: "Neutral", positive: "Positive" },
-      confidence: "confidence", trueLabel: "True label", hit: "hit", miss: "miss",
+      confidence: "confidence", trueLabel: "True label", hit: "hit", miss: "miss", ratingLabel: "Overall rating",
       empty: "Please enter a review.", noDemo: "No demo samples available.",
       loading: "Loading model (first run may take a few seconds)...",
       noFile: "Please choose a CSV file first.", batchDone: "Done, saved and downloaded results.csv",
@@ -159,7 +165,7 @@ _I18N = """
       selectAll: "全选", exportCsv: "导出 CSV", deleteSelected: "删除选中", deleteAll: "删除全部",
       aspects: { food: "口味", service: "服务", price: "价格", ambience: "环境" },
       labels: { negative: "负面", neutral: "中性", positive: "正面" },
-      confidence: "置信度", trueLabel: "真实标签", hit: "命中", miss: "未命中",
+      confidence: "置信度", trueLabel: "真实标签", hit: "命中", miss: "未命中", ratingLabel: "整体评分",
       empty: "请输入评论。", noDemo: "暂无演示样本。",
       loading: "正在加载模型（首次运行可能需要几秒）…",
       noFile: "请先选择 CSV 文件。", batchDone: "处理完成，已保存并下载 results.csv",
@@ -223,6 +229,7 @@ _PAGE = """<!doctype html>
     <div class="status" id="batch-status"></div>
   </section>
 
+  <div id="rating"></div>
   <div class="grid" id="results"></div>
   <p class="footnote" data-i18n="footnote"></p>
 </div>
@@ -242,6 +249,16 @@ _PAGE = """<!doctype html>
 
   function renderResult(data) {
     lastResult = data;
+    const rating = document.getElementById('rating');
+    if (data.rating && data.rating.star) {
+      const stars = '★'.repeat(data.rating.star) + '☆'.repeat(5 - data.rating.star);
+      rating.innerHTML = '<div class="rating"><span class="rating-stars">' + stars + '</span>' +
+        '<span class="rating-text">' + t().ratingLabel + ': ' + data.rating.star + ' / 5</span></div>';
+    } else {
+      rating.innerHTML = '';
+    }
+    const expMap = {};
+    (data.explanation || []).forEach(e => { expMap[e.aspect] = e; });
     results.innerHTML = data.aspects.map(a => {
       const name = t().aspects[a.aspect] || a.aspect;
       const label = a.label ? t().labels[a.label] : '—';
@@ -249,10 +266,20 @@ _PAGE = """<!doctype html>
       const bars = a.label && Object.keys(a.distribution).length ? Object.entries(a.distribution).map(([k, v]) =>
         '<div class="bar"><span style="width:' + (v * 100) + '%"></span></div>' +
         '<span class="dist">' + t().labels[k] + ' ' + (v * 100).toFixed(1) + '%</span>').join('') : '';
+      const exp = expMap[a.aspect];
+      let explain = '';
+      if (exp && (exp.positive.length || exp.negative.length)) {
+        const pos = exp.positive.map(x => x[0]).join(' ');
+        const neg = exp.negative.map(x => x[0]).join(' ');
+        explain = '<div class="explain">' +
+          (exp.positive.length ? '<span class="explain-pos">+ ' + pos + '</span>' : '') +
+          (exp.negative.length ? '<span class="explain-neg">- ' + neg + '</span>' : '') +
+          '</div>';
+      }
       const truth = trueLabels && trueLabels[a.aspect] ? '<div class="reveal">' + t().trueLabel + ': <b>' + t().labels[trueLabels[a.aspect]] + '</b> ' + (trueLabels[a.aspect] === a.label ? '(' + t().hit + ')' : '(' + t().miss + ')') + '</div>' : '';
       return '<div class="aspect-card"><h3>' + name + '</h3><span class="badge ' + cls + '">' + label + '</span>' +
         (a.confidence !== null ? '<div class="conf">' + t().confidence + ' ' + (a.confidence * 100).toFixed(1) + '%</div>' : '') +
-        '<div style="margin-top:.4rem">' + bars + '</div>' + truth + '</div>';
+        '<div style="margin-top:.4rem">' + bars + '</div>' + explain + truth + '</div>';
     }).join('');
   }
 
@@ -456,7 +483,22 @@ def predict_api(req: PredictRequest) -> JSONResponse:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
-    return JSONResponse({"text": req.text, "model": req.model, "aspects": aspects})
+
+    try:
+        rating = ml_model.predict_rating(req.text)
+    except FileNotFoundError:
+        rating = None
+
+    explanation = None
+    if req.model == "tfidf":
+        try:
+            explanation = ml_model.explain_aspects(req.text)
+        except Exception:  # noqa: BLE001 - explanation is best-effort
+            explanation = None
+
+    return JSONResponse(
+        {"text": req.text, "model": req.model, "aspects": aspects, "rating": rating, "explanation": explanation}
+    )
 
 
 @app.get("/models")

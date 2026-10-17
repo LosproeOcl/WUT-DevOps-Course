@@ -18,7 +18,7 @@ This is the final project for a DevOps & MLOps course. It ended up as a small en
 ## What the app does
 
 - Two pages: `/` (analyze) and `/history` (saved records).
-- One review in → four aspects with label + confidence + probability bars.
+- One review in → four aspects with label + confidence + probability bars, an overall star rating (1-5), and token-level explanations (SHAP) for the TF-IDF model.
 - Three models to choose from: TF-IDF + LR, BERT, RoBERTa.
 - CSV upload → batch-analyze each row, save results, download a CSV with original columns plus sentiment/confidence/probability columns.
 - Saved results live in SQLite, managed on `/history`: view, edit, single/batch delete, export CSV.
@@ -132,14 +132,17 @@ Binary per aspect (positive vs negative); the "neutral" class is dropped at trai
 | BERT (bert-base-chinese, 3 ep) | AutoDL GPU, `ml/train_bert.py` | 0.758 / 0.806 / 0.758 / 0.824 |
 | RoBERTa (chinese-wwm-ext, 3 ep) | AutoDL GPU | 0.765 / 0.803 / 0.763 / 0.789 |
 
+A separate **star-rating predictor** (`ml/train_rating.py`) classifies the overall 1-5 rating (the `star` column in ASAP): accuracy 0.559, MAE 0.512.
+
 ```bash
 python -m ml.data_pipeline              # build v1/v2 CSVs
 python -m ml.train --data-version v2 --mode tuned   # TF-IDF + LR, logs to MLflow
 python -m ml.train_lstm --data-version v2           # BiLSTM
 python -m ml.train_bert --data-dir data --epochs 3  # BERT/RoBERTa (GPU recommended)
+python -m ml.train_rating                           # star rating
 ```
 
-Registered on DagsHub: `absa_restaurant` (unified TF-IDF+LR), `absa_restaurant_lstm`, `absa_restaurant_bert`, `absa_restaurant_roberta`.
+Registered on DagsHub: `absa_restaurant` (unified TF-IDF+LR, Production), `absa_restaurant_rating` (Production), `absa_restaurant_bert` (Staging), `absa_restaurant_roberta` and `absa_restaurant_lstm` (Archived). Stage transitions live in `ml/stage_models.py`; registry-based serving is demonstrated by `ml/serve_model.py` (`mlflow.pyfunc.load_model("models:/absa_restaurant/Production")`).
 
 ## Course requirements — configuration guide
 
@@ -193,6 +196,15 @@ dvc push
 `ml/README_data.md` records the two versions and the v1 → v2 changes.
 
 **MLflow.** Set `DAGSHUB_REPO_OWNER` / `DAGSHUB_REPO_NAME` and `MLFLOW_TRACKING_USERNAME` / `MLFLOW_TRACKING_PASSWORD`, then run training — `ml/train.py` logs the git SHA, data checksum, hyperparameters, metrics, and model, and registers it. `ml/README_experiments.md` documents the baseline vs tuned comparison; `mlflow ui` shows the local history.
+
+**Model deployment.** Stage registered models with `ml/stage_models.py` (Staging/Production/Archived), then serve from the registry:
+
+```bash
+python -m ml.stage_models
+python -m ml.serve_model --model models:/absa_restaurant/Production --text "食物很好吃"
+# or via the CLI:
+mlflow models serve -m models:/absa_restaurant/Production -p 5003
+```
 
 ### Repo structure
 
