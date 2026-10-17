@@ -60,14 +60,16 @@ function distributionBars(a) {
   return order.filter(k => k in a.distribution).map(k => ({
     key: k,
     value: a.distribution[k],
+    cls: k === 'positive' ? 'pos' : k === 'negative' ? 'neg' : 'neu',
   }))
 }
 
 function explainFor(aspect) {
   const e = explanation.value[aspect]
   if (!e) return null
-  const pos = (e.positive || []).map(x => x[0]).join(' ')
-  const neg = (e.negative || []).map(x => x[0]).join(' ')
+  const pos = (e.positive || []).map(x => x[0])
+  const neg = (e.negative || []).map(x => x[0])
+  if (!pos.length && !neg.length) return null
   return { pos, neg }
 }
 
@@ -234,22 +236,29 @@ onMounted(async () => {
     <div class="results">
       <article v-for="a in aspects" :key="a.aspect" class="aspect-card">
         <h3>
-          {{ m().aspects[a.aspect] }}
+          <span class="aspect-name">{{ m().aspects[a.aspect] }}</span>
           <span class="badge" :class="a.label || 'neutral'">{{ m().labels[a.label] }}</span>
         </h3>
-        <div class="conf" v-if="a.confidence !== null">
-          {{ t('confidence') }} {{ (a.confidence * 100).toFixed(1) }}%
-        </div>
+
         <div class="dist">
-          <template v-for="b in distributionBars(a)" :key="b.key">
-            <div class="bar"><span :style="{ width: (b.value * 100) + '%' }"></span></div>
-            <div class="dist-label">{{ m().labels[b.key] }} {{ (b.value * 100).toFixed(1) }}%</div>
-          </template>
+          <div class="section-label">{{ t('distributionTitle') }}</div>
+          <div v-for="b in distributionBars(a)" :key="b.key" class="dist-row">
+            <span class="dist-label">{{ m().labels[b.key] }}</span>
+            <div class="bar"><span :class="b.cls" :style="{ width: (b.value * 100) + '%' }"></span></div>
+            <span class="dist-val">{{ (b.value * 100).toFixed(0) }}%</span>
+          </div>
         </div>
+
         <div class="explain" v-if="explainFor(a.aspect)">
-          <span class="explain-hint">{{ t('explainHint') }}</span>
-          <span v-if="explainFor(a.aspect).pos" class="explain-pos">+ {{ explainFor(a.aspect).pos }}</span>
-          <span v-if="explainFor(a.aspect).neg" class="explain-neg">- {{ explainFor(a.aspect).neg }}</span>
+          <div class="section-label">{{ t('keywordTitle') }}</div>
+          <div v-if="explainFor(a.aspect).pos.length" class="kw-row">
+            <span class="kw-label pos">{{ m().labels.positive }}</span>
+            <span><span v-for="w in explainFor(a.aspect).pos" :key="w" class="kw-chip pos">{{ w }}</span></span>
+          </div>
+          <div v-if="explainFor(a.aspect).neg.length" class="kw-row">
+            <span class="kw-label neg">{{ m().labels.negative }}</span>
+            <span><span v-for="w in explainFor(a.aspect).neg" :key="w" class="kw-chip neg">{{ w }}</span></span>
+          </div>
         </div>
       </article>
     </div>
