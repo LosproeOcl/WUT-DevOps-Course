@@ -8,7 +8,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
 
 jobs:
   test:
@@ -28,7 +28,27 @@ jobs:
       - name: Lint (ruff)
         run: ruff check app ml tests scripts
       - name: Run tests with coverage
-        run: python -m pytest --cov=app --cov-report=term-missing
+        run: python -m pytest --cov=app --cov-report=term-missing --cov-report=json
+      - name: Generate coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p badge-out
+          python - <<'EOF'
+          import json
+          cov = json.load(open('coverage.json'))
+          total = float(cov['totals']['percent_covered_display'])
+          color = 'green' if total >= 80 else ('yellow' if total >= 60 else 'red')
+          json.dump({'schemaVersion': 1, 'label': 'coverage', 'message': str(int(total)) + '%', 'color': color}, open('badge-out/coverage.json', 'w'))
+          EOF
+      - name: Deploy coverage badge
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./badge-out
+          publish_branch: badges
+          force_orphan: true
+          commit_message: "chore: update coverage badge"
       - name: Build Docker image
         run: docker build -t absa-app:ci .
 

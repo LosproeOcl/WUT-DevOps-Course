@@ -7,7 +7,7 @@
 [![MLflow](https://img.shields.io/badge/MLflow-2.x-0194E2?style=for-the-badge&logo=mlflow&logoColor=white)](https://mlflow.org/)
 [![DVC](https://img.shields.io/badge/DVC-3.x-13ADC7?style=for-the-badge&logo=dvc&logoColor=white)](https://dvc.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
-[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/LosproeOcl/WUT-DevOps-Course/main/badges/coverage.json&style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/LosproeOcl/WUT-DevOps-Course/actions/workflows/ci.yml)
+[![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/LosproeOcl/WUT-DevOps-Course/badges/coverage.json&style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/LosproeOcl/WUT-DevOps-Course/actions/workflows/ci.yml)
 
 > [English README](README.md)
 
@@ -44,6 +44,17 @@ tests/               pytest 单元 + 接口测试
 .github/workflows/ci.yml
 Dockerfile
 ```
+
+## 分支
+
+本仓库以独立分支承载多个课程项目，本项目在 `main`。
+
+| 分支 | 内容 |
+|------|------|
+| `main` | 本项目 — 方面级情感分析 |
+| `course-log` | 课程材料（笔记、练习指南、课件）— 原 `main` |
+| `cars-crud` | 练习项目 — 汽车增删改查 |
+| `git-playground` | 练习项目 — Git |
 
 ## 开发历程
 
