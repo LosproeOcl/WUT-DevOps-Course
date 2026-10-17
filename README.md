@@ -1,5 +1,12 @@
 # Aspect-Based Sentiment Analysis
 
+[![CI](https://img.shields.io/github/actions/workflow/status/LosproeOcl/WUT-DevOps-Course/ci.yml?branch=main&label=CI&style=for-the-badge&logo=github)](https://github.com/LosproeOcl/WUT-DevOps-Course/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/LosproeOcl/WUT-DevOps-Course?style=for-the-badge&logo=github)](https://github.com/LosproeOcl/WUT-DevOps-Course/releases)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-python%3A3.12--slim-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/)
+[![MLflow](https://img.shields.io/badge/MLflow-2.x-0194E2?style=for-the-badge&logo=mlflow&logoColor=white)](https://mlflow.org/)
+[![DVC](https://img.shields.io/badge/DVC-3.x-13ADC7?style=for-the-badge&logo=dvc&logoColor=white)](https://dvc.org/)
+
 > [中文版 README](README_zh.md)
 
 A web app that takes a Chinese restaurant review and classifies its sentiment across four aspects — **taste / service / price / ambience** — each marked positive, negative, or neutral.

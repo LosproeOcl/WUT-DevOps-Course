@@ -1,5 +1,12 @@
 # 方面级情感分析
 
+[![CI](https://img.shields.io/github/actions/workflow/status/LosproeOcl/WUT-DevOps-Course/ci.yml?branch=main&label=CI&style=for-the-badge&logo=github)](https://github.com/LosproeOcl/WUT-DevOps-Course/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/LosproeOcl/WUT-DevOps-Course?style=for-the-badge&logo=github)](https://github.com/LosproeOcl/WUT-DevOps-Course/releases)
+[![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-python%3A3.12--slim-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/)
+[![MLflow](https://img.shields.io/badge/MLflow-2.x-0194E2?style=for-the-badge&logo=mlflow&logoColor=white)](https://mlflow.org/)
+[![DVC](https://img.shields.io/badge/DVC-3.x-13ADC7?style=for-the-badge&logo=dvc&logoColor=white)](https://dvc.org/)
+
 > [English README](README.md)
 
 一个 Web 应用：输入一条中文餐厅评论，对 **口味 / 服务 / 价格 / 环境** 四个维度分别判断情感（正面 / 负面 / 中性）。
