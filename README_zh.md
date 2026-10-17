@@ -22,7 +22,7 @@
 - [DagsHub 模型注册表](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow/#/models) — 已注册模型与 stage
 - [DagsHub 仓库](https://dagshub.com/losproeocl/WUT-DevOps-Course) — 数据 + 代码镜像（DVC）
 - [GitHub releases](https://github.com/LosproeOcl/WUT-DevOps-Course/releases)
-- [部署指南](DEPLOYMENT.md)
+- [部署指南](DEPLOYMENT_zh.md)
 
 ## 应用功能
 

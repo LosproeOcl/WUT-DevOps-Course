@@ -1,5 +1,7 @@
 # Deployment
 
+> [中文版](DEPLOYMENT_zh.md)
+
 ## Environments
 
 The app is deployed as a Docker image. Two environments are published from the
