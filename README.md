@@ -17,7 +17,7 @@ A web app that takes a Chinese restaurant review and classifies its sentiment ac
 This is the final project for a DevOps & MLOps course. It ended up as a small end-to-end MLOps pipeline: DVC for data, MLflow for experiments, Docker + GitHub Actions for CI/CD, and a FastAPI app with a bilingual UI, three selectable models, CSV batch import/export, and CRUD for saved results.
 
 **Related links:**
-- **Live demo** — https://efrei-DevOps.losproeocl.cn
+- **Live demo** — http://efrei-DevOps.losproeocl.cn
 - [DagsHub MLflow experiments](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow) — runs, metrics, and parameters
 - [DagsHub model registry](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow/#/models) — registered models and stages
 - [DagsHub repository](https://dagshub.com/losproeocl/WUT-DevOps-Course) — data + code mirror (DVC)

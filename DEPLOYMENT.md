@@ -73,7 +73,7 @@ echo '/swapfile none swap sw 0 0' >> /etc/fstab
 
 ## Production server
 
-The project runs at <https://efrei-DevOps.losproeocl.cn> on a 2-core / 4 GB Ubuntu
+The project runs at <http://efrei-DevOps.losproeocl.cn> on a 2-core / 4 GB Ubuntu
 24.04 VPS (149.104.21.193), deployed as the full Docker image behind nginx.
 
 Deployment steps (run as root on the server):

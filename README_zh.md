@@ -17,7 +17,7 @@
 这是 DevOps & MLOps 课程的期末项目，最后做成了一个端到端的 MLOps 小流水线：DVC 管数据、MLflow 管实验、Docker + GitHub Actions 做 CI/CD，FastAPI 应用带中英双语界面、三个可选模型、CSV 批量导入导出、以及保存结果的增删改查。
 
 **相关链接：**
-- **在线演示** — https://efrei-DevOps.losproeocl.cn
+- **在线演示** — http://efrei-DevOps.losproeocl.cn
 - [DagsHub MLflow 实验](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow) — 运行、指标与参数
 - [DagsHub 模型注册表](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow/#/models) — 已注册模型与 stage
 - [DagsHub 仓库](https://dagshub.com/losproeocl/WUT-DevOps-Course) — 数据 + 代码镜像（DVC）
