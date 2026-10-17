@@ -141,7 +141,7 @@ python -m ml.train_bert --data-dir data --epochs 3
 
 ### DevOps
 
-**Version control.** Branch model `main` ← `staging` ← `dev` ← `feature/*`; the deliverable is on `finalProject_sentimentAnalysis`.
+**Version control.** Branch model `main` ← `staging` ← `dev` ← `feature/*`; the deliverable is on `main` (course materials on `course-log`).
 
 ```bash
 git switch -c feature/xxx

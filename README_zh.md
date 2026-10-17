@@ -141,7 +141,7 @@ python -m ml.train_bert --data-dir data --epochs 3
 
 ### DevOps
 
-**版本控制。** 分支模型 `main` ← `staging` ← `dev` ← `feature/*`；交付在 `finalProject_sentimentAnalysis`。
+**版本控制。** 分支模型 `main` ← `staging` ← `dev` ← `feature/*`；交付在 `main`（课程材料在 `course-log`）。
 
 ```bash
 git switch -c feature/xxx

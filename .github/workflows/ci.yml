@@ -2,9 +2,9 @@ name: CI
 
 on:
   pull_request:
-    branches: [dev, staging, main, finalProject_sentimentAnalysis]
+    branches: [dev, staging, main]
   push:
-    branches: [dev, staging, main, finalProject_sentimentAnalysis]
+    branches: [dev, staging, main]
   workflow_dispatch:
 
 permissions:
