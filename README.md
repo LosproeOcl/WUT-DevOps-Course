@@ -5,6 +5,7 @@
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-python%3A3.12--slim-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/)
 [![MLflow](https://img.shields.io/badge/MLflow-2.x-0194E2?style=for-the-badge&logo=mlflow&logoColor=white)](https://mlflow.org/)
+[![DagsHub](https://img.shields.io/badge/DagsHub-experiments%20%26%20registry-2E77BC?style=for-the-badge&logo=dagshub&logoColor=white)](https://dagshub.com/losproeocl/WUT-DevOps-Course)
 [![DVC](https://img.shields.io/badge/DVC-3.x-13ADC7?style=for-the-badge&logo=dvc&logoColor=white)](https://dvc.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/LosproeOcl/WUT-DevOps-Course/badges/coverage.json&style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/LosproeOcl/WUT-DevOps-Course/actions/workflows/ci.yml)
@@ -14,6 +15,12 @@
 A web app that takes a Chinese restaurant review and classifies its sentiment across four aspects — **taste / service / price / ambience** — each marked positive, negative, or neutral.
 
 This is the final project for a DevOps & MLOps course. It ended up as a small end-to-end MLOps pipeline: DVC for data, MLflow for experiments, Docker + GitHub Actions for CI/CD, and a FastAPI app with a bilingual UI, three selectable models, CSV batch import/export, and CRUD for saved results.
+
+**Related links:**
+- [DagsHub MLflow experiments](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow) — runs, metrics, and parameters
+- [DagsHub model registry](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow/#/models) — registered models and stages
+- [DagsHub repository](https://dagshub.com/losproeocl/WUT-DevOps-Course) — data + code mirror (DVC)
+- [GitHub releases](https://github.com/LosproeOcl/WUT-DevOps-Course/releases)
 
 ## What the app does
 
@@ -75,6 +82,10 @@ Experiment tracking follows the course MLflow guide, local first, then DagsHub; 
 The app expanded from a single `/predict` endpoint to four-aspect output, a bilingual UI, model switching, CSV batch import/export, record CRUD, and finally two pages. One subtle failure: a `'\n'` in the Python triple-quoted string became a literal newline in the generated JavaScript and broke the script, avoided with `String.fromCharCode`.
 
 CI/CD uses GitHub Actions: pull requests run ruff, pytest, and a Docker build; pushes to staging or main publish images. The image is `python:3.12-slim` with runtime dependencies only, with torch and transformers lazy-imported.
+
+The rating task came later. ASAP ships a `star` column, so a second head predicts the overall 1-5 score alongside the four aspects. The first TF-IDF + LR rating model reached 55.9% exact accuracy; the first BERT attempt at a 128-token max length *regressed* to 54.2%, and profiling the corpus showed the mean review is 320 characters, meaning 99.8% of inputs were being truncated. Retraining at 384 tokens with a linear warmup schedule lifted BERT to 58.1%, and RoBERTa (chinese-wwm-ext) with label smoothing reached 59.2% accuracy and MAE 0.446, now the default rating model. SHAP (`LinearExplainer`) was added on the TF-IDF model so each aspect can justify itself with the tokens that most moved the decision.
+
+The frontend was rewritten twice. It began as server-rendered HTML embedded in the FastAPI module, then became a separate Vue 3 + Vite single-page application once the UI accumulated enough state to outgrow a template string. The decoupling removed ~430 lines of HTML/CSS/JS from `app/main.py`, leaving a pure REST API that serves the built SPA as static files in production. The design follows Typecho's default theme — serif body, thin borders, a muted blue accent — with guidance hints, a focus ring, a clear button, and a character counter added to the input, and the result cards redesigned with labeled probability bars and keyword chips.
 
 ## Environment
 
@@ -153,6 +164,12 @@ python -m ml.register_rating_roberta                # register rating RoBERTa to
 ```
 
 Registered on DagsHub: `absa_restaurant` (unified TF-IDF+LR, Production), `absa_restaurant_rating` (TF-IDF rating, Production), `absa_restaurant_rating_roberta` (RoBERTa rating, Production), `absa_restaurant_bert` (Staging), `absa_restaurant_roberta` and `absa_restaurant_lstm` (Archived). Stage transitions live in `ml/stage_models.py`; registry-based serving is demonstrated by `ml/serve_model.py` (`mlflow.pyfunc.load_model("models:/absa_restaurant/Production")`).
+
+### Confidence and the "neutral" class
+
+Each aspect is binary (positive vs negative) at training time; the model reports the winning class's probability as **confidence**. Predictions whose confidence falls below `UNCERTAIN_THRESHOLD = 0.55` are downgraded to **neutral** rather than committing to a weak positive/negative call. This keeps the bar for a confident judgment explicit and surfaced in the UI as the probability bars next to each aspect.
+
+The star rating (1-5) is a separate 5-class task; its "confidence" is the softmax probability of the predicted star. The RoBERTa rating model is within one star of the true rating 96.4% of the time, which is the more meaningful agreement metric for an ordinal 1-5 scale.
 
 ## Course requirements — configuration guide
 

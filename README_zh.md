@@ -5,6 +5,7 @@
 [![Python 3.12](https://img.shields.io/badge/Python-3.12-3776AB?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
 [![Docker](https://img.shields.io/badge/Docker-python%3A3.12--slim-2496ED?style=for-the-badge&logo=docker&logoColor=white)](https://hub.docker.com/)
 [![MLflow](https://img.shields.io/badge/MLflow-2.x-0194E2?style=for-the-badge&logo=mlflow&logoColor=white)](https://mlflow.org/)
+[![DagsHub](https://img.shields.io/badge/DagsHub-实验%20%26%20注册表-2E77BC?style=for-the-badge&logo=dagshub&logoColor=white)](https://dagshub.com/losproeocl/WUT-DevOps-Course)
 [![DVC](https://img.shields.io/badge/DVC-3.x-13ADC7?style=for-the-badge&logo=dvc&logoColor=white)](https://dvc.org/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow?style=for-the-badge&logo=opensourceinitiative&logoColor=white)](LICENSE)
 [![Coverage](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/LosproeOcl/WUT-DevOps-Course/badges/coverage.json&style=for-the-badge&logo=pytest&logoColor=white)](https://github.com/LosproeOcl/WUT-DevOps-Course/actions/workflows/ci.yml)
@@ -14,6 +15,12 @@
 一个 Web 应用：输入一条中文餐厅评论，对 **口味 / 服务 / 价格 / 环境** 四个维度分别判断情感（正面 / 负面 / 中性）。
 
 这是 DevOps & MLOps 课程的期末项目，最后做成了一个端到端的 MLOps 小流水线：DVC 管数据、MLflow 管实验、Docker + GitHub Actions 做 CI/CD，FastAPI 应用带中英双语界面、三个可选模型、CSV 批量导入导出、以及保存结果的增删改查。
+
+**相关链接：**
+- [DagsHub MLflow 实验](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow) — 运行、指标与参数
+- [DagsHub 模型注册表](https://dagshub.com/losproeocl/WUT-DevOps-Course.mlflow/#/models) — 已注册模型与 stage
+- [DagsHub 仓库](https://dagshub.com/losproeocl/WUT-DevOps-Course) — 数据 + 代码镜像（DVC）
+- [GitHub releases](https://github.com/LosproeOcl/WUT-DevOps-Course/releases)
 
 ## 应用功能
 
@@ -75,6 +82,10 @@ DVC 远端迁移一次。初期无 Azure 账号，以本地目录占位；取得
 应用由单一 `/predict` 端点扩展至四维输出、双语界面、模型切换、CSV 批量导入导出、记录 CRUD，最终拆分分析页与历史页。期间一处隐蔽故障：Python 三引号字符串内 `'\n'` 在生成 JS 中成为字面换行，脚本整体失效，以 `String.fromCharCode` 规避。
 
 CI/CD 采用 GitHub Actions：PR 触发 ruff、pytest、Docker 构建，push 至 staging/main 发布镜像。镜像基于 `python:3.12-slim`，仅含运行时依赖，torch/transformers 懒加载。
+
+星级评分任务后置补充。ASAP 自带 `star` 列，故另设一条预测 1-5 星的头，与四个维度并行输出。首个 TF-IDF + LR 星级模型精确率 55.9%；首版 BERT 在 128 长度下反而回退至 54.2%，统计语料发现评论平均 320 字，即 99.8% 的输入被截断。改为 384 长度并加线性 warmup 后 BERT 提升至 58.1%，配合 label smoothing 的 RoBERTa（chinese-wwm-ext）达 59.2% / MAE 0.446，现为默认星级模型。随后在 TF-IDF 模型上引入 SHAP（`LinearExplainer`），使每个维度能以影响最大的字词自证判断。
+
+前端重写两次。初为内嵌于 FastAPI 模块的服务端渲染 HTML，界面状态增多后迁出为独立的 Vue 3 + Vite 单页应用。解耦从 `app/main.py` 移除了约 430 行 HTML/CSS/JS，仅剩纯 REST API，生产环境直接托管构建产物。视觉沿用 Typecho 默认主题——衬线正文、细边框、低饱和蓝主色；输入框增加聚焦光环、清空按钮与字数统计，结果卡片重设计为带标签的概率条形图与关键词 chips。
 
 ## 环境配置
 
@@ -153,6 +164,12 @@ python -m ml.register_rating_roberta                # 注册星级 RoBERTa 到 M
 ```
 
 DagsHub 上注册：`absa_restaurant`（统一 TF-IDF+LR，Production）、`absa_restaurant_rating`（TF-IDF 星级，Production）、`absa_restaurant_rating_roberta`（RoBERTa 星级，Production）、`absa_restaurant_bert`（Staging）、`absa_restaurant_roberta` 与 `absa_restaurant_lstm`（Archived）。stage 迁移在 `ml/stage_models.py`；基于注册表的部署由 `ml/serve_model.py` 演示（`mlflow.pyfunc.load_model("models:/absa_restaurant/Production")`）。
+
+### 置信度与「中性」类
+
+每个维度在训练时为二分类（正面 vs 负面）；模型以胜出类别的概率作为**置信度**输出。置信度低于 `UNCERTAIN_THRESHOLD = 0.55` 的预测会被降级为**中性**，避免对摇摆不定的正负判断强行下结论。该阈值在界面中通过每个维度旁的概率条形图直观呈现。
+
+星级评分（1-5）是独立的五分类任务，其「置信度」为预测星级的 softmax 概率。RoBERTa 星级模型在 ±1 星范围内与真实评分一致的比例达 96.4%，对 1-5 的有序刻度而言，这是比精确命中更有意义的评估指标。
 
 ## 课程要求对照 — 配置指示
 
